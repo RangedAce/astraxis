@@ -35,6 +35,9 @@ COPY --from=base /app/apps/backend/package.json /app/apps/backend/
 COPY --from=base /app/apps/frontend/package.json /app/apps/frontend/
 COPY --from=base /app/packages/shared/package.json /app/packages/shared/
 
+# Ensure prisma schema is present for generation
+COPY --from=base /app/apps/backend/prisma /app/apps/backend/prisma
+
 # Install deps (include dev to run prisma) then prune to prod after generate
 RUN NODE_ENV=development pnpm install && pnpm --filter backend prisma:generate && pnpm prune --prod
 
