@@ -3,10 +3,10 @@ version: "3.9"
 services:
   cockroach:
     image: cockroachdb/cockroach:v23.1.11
-    command: start-single-node --insecure --http-addr=0.0.0.0:8080 --listen-addr=0.0.0.0:26257
+    command: start-single-node --insecure --http-addr=0.0.0.0:8085 --listen-addr=0.0.0.0:26257
     ports:
       - "26257:26257"
-      - "8080:8080"
+      - "8085:8085"
     volumes:
       - astraxis_db_data:/cockroach/cockroach-data
 
