@@ -30,6 +30,7 @@ RUN corepack enable
 WORKDIR /app
 
 # Runtime deps + built artefacts
+COPY --from=base /root/.local/share/pnpm /root/.local/share/pnpm
 COPY --from=base /app/node_modules /app/node_modules
 COPY --from=base /app/apps/backend/dist /app/apps/backend/dist
 COPY --from=base /app/apps/frontend/.next /app/apps/frontend/.next
