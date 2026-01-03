@@ -115,10 +115,13 @@ export class UniverseService {
     temperature?: number
   ) {
     const levels = await tx.buildingLevel.findMany({ where: { planetId } });
-    const levelMap = levels.reduce<Record<string, number>>((acc, curr) => {
-      acc[curr.buildingKey] = curr.level;
-      return acc;
-    }, {});
+    const levelMap = levels.reduce<Record<string, number>>(
+      (acc: Record<string, number>, curr) => {
+        acc[curr.buildingKey] = curr.level;
+        return acc;
+      },
+      {}
+    );
     const planet = await tx.planet.findUnique({ where: { id: planetId } });
     const temp = temperature ?? planet?.temperature ?? 20;
     const production = calculateProductionFromLevels(levelMap, temp);

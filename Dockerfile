@@ -10,12 +10,15 @@ COPY apps/backend/package.json apps/backend/tsconfig*.json apps/backend/nest-cli
 COPY apps/frontend/package.json apps/frontend/tsconfig.json apps/frontend/next.config.js ./apps/frontend/
 COPY packages/shared/package.json packages/shared/tsconfig*.json ./packages/shared/
 
+ENV DATABASE_URL="postgresql://root@localhost:26257/astraxis?sslmode=disable"
+
 RUN pnpm install --ignore-scripts
 
 # Full sources for build
 COPY . .
 
-RUN pnpm --filter @astraxis/shared build \
+RUN pnpm --filter backend prisma:generate \
+ && pnpm --filter @astraxis/shared build \
  && pnpm --filter backend build \
  && pnpm --filter frontend build
 

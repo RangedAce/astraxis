@@ -82,10 +82,13 @@ export class PlanetService {
       });
       if (planet) {
         const levels = await tx.buildingLevel.findMany({ where: { planetId } });
-        const levelMap = levels.reduce<Record<string, number>>((acc, curr) => {
-          acc[curr.buildingKey] = curr.level;
-          return acc;
-        }, {});
+        const levelMap = levels.reduce<Record<string, number>>(
+          (acc: Record<string, number>, curr) => {
+            acc[curr.buildingKey] = curr.level;
+            return acc;
+          },
+          {}
+        );
         const computed = calculateProductionFromLevels(levelMap, planet.temperature);
         production = await tx.production.update({
           where: { planetId },
@@ -240,10 +243,13 @@ export class PlanetService {
       await this.queueService.ensureNoPending(tx, playerId, planetId, QueueType.SHIP);
       const { resource } = await this.applyProductionTx(tx, planetId, now);
       const levels = await tx.buildingLevel.findMany({ where: { planetId } });
-      const levelMap = levels.reduce<Record<string, number>>((acc, curr) => {
-        acc[curr.buildingKey] = curr.level;
-        return acc;
-      }, {});
+      const levelMap = levels.reduce<Record<string, number>>(
+        (acc: Record<string, number>, curr) => {
+          acc[curr.buildingKey] = curr.level;
+          return acc;
+        },
+        {}
+      );
       const shipyardLevel = levelMap[BuildingKey.Shipyard] ?? 0;
       const roboticsLevel = levelMap[BuildingKey.RoboticsFactory] ?? 0;
       const cost = calculateShipCost(dto.shipKey, dto.qty);
