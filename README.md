@@ -41,12 +41,14 @@ pnpm run dev   # démarre backend + frontend en parallèle
 - Pages: `/login`, `/register`, `/overview` (ressources live, boutons construction/recherche/vaisseaux, file d’attente avec countdown).
 - Socket.IO client pour mises à jour en temps réel. API base configurable via `NEXT_PUBLIC_API_URL`.
 
-## Docker / Scaling
-- Image unique multi-rôle (Dockerfile racine) contrôlée par `ROLE` (`backend`/`frontend`).
-- Compose dev/prod: `infra/docker/docker-compose.dev.yml`, `infra/docker/docker-compose.prod.yml`
-- Traefik route `/api` et `/socket` vers le backend, `/` vers le frontend.
-- CockroachDB 3 nœuds (insecure pour le dev), Redis pour Socket.IO + BullMQ.
-- Backend et frontend stateless : scale via `docker compose ... up --scale backend=2 --scale frontend=2`.
+## Docker / déploiement
+- Image unique multi-rôle (Dockerfile racine ou `ghcr.io/rangedace/astraxis:latest`), contrôlée par `ROLE` (`backend`/`frontend`).
+- Stacks disponibles pour Portainer (standalone ou séparées) dans `infra/docker/` :
+  - `docker-compose.portainer.yml` : cockroach (1 nœud), redis, backend, frontend (frontend exposé sur `32601:3000`).
+  - `docker-compose.backend.yml` : cockroach + redis + backend uniquement.
+  - `docker-compose.frontend.yml` : frontend seul (à pointer vers un backend existant via `NEXT_PUBLIC_API_URL`).
+- Volumes : `astraxis_db_data` pour persister Cockroach.
+- Ports par défaut : backend 3001, frontend 32601, Cockroach SQL 26257, UI 8080.
 
 ## Notes
 - TypeScript strict partout (base tsconfig partagé).

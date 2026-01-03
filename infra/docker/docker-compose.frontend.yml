@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  frontend:
+    image: ghcr.io/rangedace/astraxis:latest
+    environment:
+      ROLE: frontend
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://backend-host:3001/api
+    ports:
+      - "32601:3000"
+
+volumes: {}

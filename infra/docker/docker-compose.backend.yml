@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  cockroach:
+    image: cockroachdb/cockroach:v23.1.11
+    command: start-single-node --insecure --http-addr=0.0.0.0:8080 --listen-addr=0.0.0.0:26257
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    volumes:
+      - astraxis_db_data:/cockroach/cockroach-data
+
+  redis:
+    image: redis:7
+
+  backend:
+    image: ghcr.io/rangedace/astraxis:latest
+    environment:
+      ROLE: backend
+      PORT: 3001
+      DATABASE_URL: postgresql://root@cockroach:26257/astraxis?sslmode=disable
+      JWT_SECRET: change_me_secret
+      JWT_REFRESH_SECRET: change_me_refresh
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - cockroach
+      - redis
+    ports:
+      - "3001:3001"
+
+volumes:
+  astraxis_db_data:
