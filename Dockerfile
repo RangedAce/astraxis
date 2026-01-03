@@ -30,7 +30,6 @@ RUN corepack enable
 WORKDIR /app
 
 # Runtime deps + built artefacts
-COPY --from=base /app/node_modules /app/node_modules
 COPY --from=base /app/apps/backend/dist /app/apps/backend/dist
 COPY --from=base /app/apps/frontend/.next /app/apps/frontend/.next
 COPY --from=base /app/apps/frontend/public /app/apps/frontend/public
@@ -39,6 +38,9 @@ COPY --from=base /app/package.json /app/pnpm-workspace.yaml /app/tsconfig.base.j
 COPY --from=base /app/apps/backend/package.json /app/apps/backend/
 COPY --from=base /app/apps/frontend/package.json /app/apps/frontend/
 COPY --from=base /app/packages/shared/package.json /app/packages/shared/
+
+# Install only runtime dependencies (recreates proper workspace links)
+RUN pnpm install --prod --ignore-scripts
 
 # Entrypoint multi-rôle
 CMD case "$ROLE" in \
