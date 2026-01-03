@@ -7,11 +7,9 @@ import { ConfigService } from '@nestjs/config';
 
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter> | null = null;
-  private readonly configService: ConfigService;
 
-  constructor(app: INestApplicationContext) {
+  constructor(app: INestApplicationContext, private readonly configService: ConfigService) {
     super(app);
-    this.configService = app.get(ConfigService);
   }
 
   async connectToRedis() {
