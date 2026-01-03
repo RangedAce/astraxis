@@ -25,8 +25,7 @@ RUN pnpm --filter backend prisma:generate \
 
 FROM node:20-bullseye-slim AS runner
 ENV PNPM_HOME="/pnpm" \
-    PATH="$PNPM_HOME:$PATH" \
-    NODE_ENV=production
+    PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 WORKDIR /app
 
@@ -37,7 +36,9 @@ COPY --from=base /app/apps/frontend/package.json /app/apps/frontend/
 COPY --from=base /app/packages/shared/package.json /app/packages/shared/
 
 # Install deps (include dev to run prisma) then prune to prod after generate
-RUN pnpm install && pnpm --filter backend prisma:generate && pnpm prune --prod
+RUN NODE_ENV=development pnpm install && pnpm --filter backend prisma:generate && pnpm prune --prod
+
+ENV NODE_ENV=production
 
 # Built artefacts
 COPY --from=base /app/apps/backend/dist /app/apps/backend/dist
