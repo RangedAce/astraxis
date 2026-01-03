@@ -12,7 +12,7 @@ COPY packages/shared/package.json packages/shared/tsconfig*.json ./packages/shar
 
 ENV DATABASE_URL="postgresql://root@localhost:26257/astraxis?sslmode=disable"
 
-RUN pnpm install --ignore-scripts
+RUN pnpm install
 
 # Full sources for build
 COPY . .
