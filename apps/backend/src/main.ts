@@ -2,9 +2,9 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { RedisIoAdapter } from './ws/redis-io.adapter';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -24,11 +24,11 @@ async function bootstrap() {
     credentials: true
   });
 
-  const redisAdapter = app.get(RedisIoAdapter);
+  const configService = app.get(ConfigService);
+  const redisAdapter = new RedisIoAdapter(app, configService);
   await redisAdapter.connectToRedis();
   app.useWebSocketAdapter(redisAdapter);
 
-  const configService = app.get(ConfigService);
   const port = configService.get<number>('port') ?? 3001;
   await app.listen(port);
   Logger.log(`Backend running on http://localhost:${port}`, 'Bootstrap');
