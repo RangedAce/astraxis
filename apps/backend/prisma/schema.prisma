@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  players      Player[]
+}
+
+model Universe {
+  id                 String    @id @default(uuid())
+  name               String
+  speedFleet         Int       @default(1)
+  speedBuild         Int       @default(1)
+  speedResearch      Int       @default(1)
+  isPeacefulDefault  Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  players            Player[]
+  planets            Planet[]
+}
+
+model Player {
+  id          String          @id @default(uuid())
+  userId      String
+  universeId  String
+  nickname    String
+  isPeaceful  Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  user        User            @relation(fields: [userId], references: [id])
+  universe    Universe        @relation(fields: [universeId], references: [id])
+  planets     Planet[]
+  research    ResearchLevel[]
+  queueItems  QueueItem[]
+}
+
+model Planet {
+  id           String            @id @default(uuid())
+  universeId   String
+  playerId     String
+  galaxy       Int
+  system       Int
+  position     Int
+  name         String
+  temperature  Int
+  createdAt    DateTime          @default(now())
+  universe     Universe          @relation(fields: [universeId], references: [id])
+  player       Player            @relation(fields: [playerId], references: [id])
+  resources    ResourceBalance?
+  production   Production?
+  buildings    BuildingLevel[]
+  ships        ShipCount[]
+  queueItems   QueueItem[]
+
+  @@unique([universeId, galaxy, system, position])
+}
+
+model ResourceBalance {
+  planetId         String   @id
+  metal            Decimal  @default(0)
+  crystal          Decimal  @default(0)
+  deuterium        Decimal  @default(0)
+  lastCalculatedAt DateTime
+  planet           Planet   @relation(fields: [planetId], references: [id])
+}
+
+model Production {
+  planetId         String   @id
+  metalPerHour     Decimal  @default(0)
+  crystalPerHour   Decimal  @default(0)
+  deutPerHour      Decimal  @default(0)
+  energy           Int      @default(0)
+  lastCalculatedAt DateTime
+  planet           Planet   @relation(fields: [planetId], references: [id])
+}
+
+model BuildingLevel {
+  planetId    String
+  buildingKey String
+  level       Int      @default(0)
+  planet      Planet   @relation(fields: [planetId], references: [id])
+
+  @@id([planetId, buildingKey])
+}
+
+model ResearchLevel {
+  playerId String
+  techKey  String
+  level    Int     @default(0)
+  player   Player  @relation(fields: [playerId], references: [id])
+
+  @@id([playerId, techKey])
+}
+
+model ShipCount {
+  planetId String
+  shipKey  String
+  count    Int     @default(0)
+  planet   Planet  @relation(fields: [planetId], references: [id])
+
+  @@id([planetId, shipKey])
+}
+
+model QueueItem {
+  id          String      @id @default(uuid())
+  type        QueueType
+  planetId    String?
+  playerId    String
+  key         String
+  levelOrQty  Int
+  startAt     DateTime
+  endAt       DateTime
+  status      QueueStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+  planet      Planet?     @relation(fields: [planetId], references: [id])
+  player      Player      @relation(fields: [playerId], references: [id])
+
+  @@index([playerId, type, status])
+  @@index([planetId, type, status])
+}
+
+enum QueueType {
+  BUILDING
+  RESEARCH
+  SHIP
+}
+
+enum QueueStatus {
+  PENDING
+  DONE
+  CANCELLED
+}

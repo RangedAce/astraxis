@@ -1,0 +1,81 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { FormEvent, useState } from 'react';
+import { register } from '../../lib/api';
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await register(email, password, nickname);
+      const universeId = data.player.universeId;
+      const planetId = data.planet?.id || data.player.planets?.[0]?.id;
+      if (universeId && planetId) {
+        router.push(`/overview?universe=${universeId}&planet=${planetId}`);
+      } else {
+        router.push('/overview');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <h2>Inscription</h2>
+      <form className="stack" onSubmit={onSubmit}>
+        <div className="field">
+          <label>Nickname</label>
+          <input
+            className="input"
+            type="text"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            required
+          />
+        </div>
+        <div className="field">
+          <label>Email</label>
+          <input
+            className="input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div className="field">
+          <label>Mot de passe</label>
+          <input
+            className="input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+          />
+        </div>
+        {error && <div className="danger">{error}</div>}
+        <button className="btn primary" type="submit" disabled={loading}>
+          {loading ? 'Création...' : 'Créer le compte'}
+        </button>
+        <div className="muted">
+          D&eacute;j&agrave; inscrit ? <Link href="/login">Connexion</Link>
+        </div>
+      </form>
+    </div>
+  );
+}
