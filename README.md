@@ -42,6 +42,7 @@ pnpm run dev   # démarre backend + frontend en parallèle
 - Socket.IO client pour mises à jour en temps réel. API base configurable via `NEXT_PUBLIC_API_URL`.
 
 ## Docker / Scaling
+- Image unique multi-rôle (Dockerfile racine) contrôlée par `ROLE` (`backend`/`frontend`).
 - Compose dev/prod: `infra/docker/docker-compose.dev.yml`, `infra/docker/docker-compose.prod.yml`
 - Traefik route `/api` et `/socket` vers le backend, `/` vers le frontend.
 - CockroachDB 3 nœuds (insecure pour le dev), Redis pour Socket.IO + BullMQ.

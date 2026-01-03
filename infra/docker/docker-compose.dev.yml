@@ -40,9 +40,10 @@ services:
 
   backend:
     build:
-      context: ../../
-      dockerfile: apps/backend/Dockerfile
+      context: ../..
+      dockerfile: ../../Dockerfile
     environment:
+      - ROLE=backend
       - PORT=3001
       - DATABASE_URL=postgresql://root@cockroach-1:26257/astraxis?sslmode=disable
       - JWT_SECRET=astraxis-dev-secret
@@ -62,9 +63,10 @@ services:
 
   frontend:
     build:
-      context: ../../
-      dockerfile: apps/frontend/Dockerfile
+      context: ../..
+      dockerfile: ../../Dockerfile
     environment:
+      - ROLE=frontend
       - NEXT_PUBLIC_API_URL=http://localhost/api
     depends_on:
       - backend
