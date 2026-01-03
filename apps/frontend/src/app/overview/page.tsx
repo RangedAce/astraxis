@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   BuildingKey,
@@ -80,6 +80,27 @@ export default function OverviewPage() {
     return map;
   }, [overview]);
 
+  const reload = useCallback(async () => {
+    const session = loadSession();
+    if (!session || !universeId || !planetId) return;
+    try {
+      setLoading(true);
+      const data = await fetchOverview(universeId, planetId);
+      setOverview(data);
+      setQueue(data.queue);
+      setResources({
+        metal: data.resources.metal,
+        crystal: data.resources.crystal,
+        deut: data.resources.deuterium
+      });
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }, [planetId, universeId]);
+
   useEffect(() => {
     const session = loadSession();
     if (!session) {
@@ -117,32 +138,11 @@ export default function OverviewPage() {
     return () => {
       s.disconnect();
     };
-  }, [universeId, planetId]);
-
-  async function reload() {
-    const session = loadSession();
-    if (!session || !universeId || !planetId) return;
-    try {
-      setLoading(true);
-      const data = await fetchOverview(universeId, planetId);
-      setOverview(data);
-      setQueue(data.queue);
-      setResources({
-        metal: data.resources.metal,
-        crystal: data.resources.crystal,
-        deut: data.resources.deuterium
-      });
-      setError(null);
-    } catch (err: any) {
-      setError(err.message || 'Erreur');
-    } finally {
-      setLoading(false);
-    }
-  }
+  }, [router, universeId, planetId, reload]);
 
   useEffect(() => {
     reload();
-  }, [universeId, planetId]);
+  }, [universeId, planetId, reload]);
 
   async function handleBuilding(key: BuildingKey) {
     if (!planetId) return;

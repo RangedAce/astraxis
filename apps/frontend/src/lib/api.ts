@@ -4,10 +4,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 async function apiFetch(path: string, options: RequestInit = {}, retry = true): Promise<any> {
   const session = loadSession();
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {})
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
   };
+  if (options.headers) {
+    Object.assign(headers, options.headers as Record<string, string>);
+  }
   if (session?.accessToken) {
     headers['Authorization'] = `Bearer ${session.accessToken}`;
   }
