@@ -36,11 +36,8 @@ COPY --from=base /app/apps/backend/package.json /app/apps/backend/
 COPY --from=base /app/apps/frontend/package.json /app/apps/frontend/
 COPY --from=base /app/packages/shared/package.json /app/packages/shared/
 
-# Install runtime dependencies (build native deps like argon2) and regenerate Prisma client
-ENV DATABASE_URL="postgresql://root@localhost:26257/astraxis?sslmode=disable"
-RUN pnpm install --prod && pnpm --filter backend prisma:generate
-
-# Built artefacts
+# Runtime deps and built artefacts from build stage (includes generated Prisma client)
+COPY --from=base /app/node_modules /app/node_modules
 COPY --from=base /app/apps/backend/dist /app/apps/backend/dist
 COPY --from=base /app/apps/frontend/.next /app/apps/frontend/.next
 COPY --from=base /app/apps/frontend/public /app/apps/frontend/public
