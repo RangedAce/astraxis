@@ -1,15 +1,16 @@
 import { INestApplicationContext } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { ServerOptions } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
+import { ConfigService } from '@nestjs/config';
 
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter> | null = null;
 
-  constructor(app: INestApplicationContext, private readonly configService: ConfigService) {
+  constructor(app: INestApplicationContext) {
     super(app);
+    this.configService = app.get(ConfigService);
   }
 
   async connectToRedis() {

@@ -9,6 +9,11 @@ services:
       - "8085:8085"
     volumes:
       - astraxis_db_data:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD-SHELL", "cockroach sql --insecure --host=127.0.0.1:26257 -e 'SELECT 1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7
