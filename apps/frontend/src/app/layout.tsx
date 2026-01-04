@@ -1,5 +1,6 @@
 import './globals.css';
 import { ReactNode } from 'react';
+import Script from 'next/script';
 
 export const metadata = {
   title: 'Astraxis',
@@ -10,7 +11,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="app-shell">
-        <script src="/env.js" />
+        <Script src="/env.js" strategy="beforeInteractive" />
         <div className="app-container">
           <header className="app-header">
             <div className="brand">Astraxis</div>
