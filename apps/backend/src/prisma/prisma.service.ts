@@ -16,7 +16,18 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async onModuleInit() {
-    await this.$connect();
+    const maxAttempts = 10;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.$connect();
+        return;
+      } catch (err) {
+        if (attempt === maxAttempts) {
+          throw err;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
   }
 
   async enableShutdownHooks(app: INestApplication) {
