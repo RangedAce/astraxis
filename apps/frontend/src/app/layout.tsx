@@ -10,6 +10,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="app-shell">
+        <script src="/env.js" />
         <div className="app-container">
           <header className="app-header">
             <div className="brand">Astraxis</div>

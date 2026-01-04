@@ -48,8 +48,11 @@ COPY --from=base /app/apps/backend/dist /app/apps/backend/dist
 COPY --from=base /app/apps/frontend/.next /app/apps/frontend/.next
 COPY --from=base /app/apps/frontend/public /app/apps/frontend/public
 COPY --from=base /app/packages/shared/dist /app/packages/shared/dist
+COPY infra/docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Entrypoint multi-rôle
+ENTRYPOINT ["/entrypoint.sh"]
 CMD case "$ROLE" in \
     backend|api) node apps/backend/dist/main.js ;; \
     frontend|web) pnpm --filter frontend start ;; \

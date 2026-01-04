@@ -1,6 +1,13 @@
 import { loadSession, saveSession, updateTokens, clearSession } from './auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+function getRuntimeApiBase() {
+  if (typeof window === 'undefined') return null;
+  const runtime = (window as any).__ENV__?.NEXT_PUBLIC_API_URL;
+  return typeof runtime === 'string' && runtime.length > 0 ? runtime : null;
+}
+
+const API_BASE =
+  getRuntimeApiBase() || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 async function apiFetch(path: string, options: RequestInit = {}, retry = true): Promise<any> {
   const session = loadSession();
