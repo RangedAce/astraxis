@@ -27,6 +27,15 @@ services:
       done
       /cockroach/cockroach sql --insecure --host=cockroach:26258 -e "CREATE DATABASE IF NOT EXISTS astraxis;"
 
+  migrator:
+    image: ghcr.io/rangedace/astraxis:latest
+    environment:
+      ROLE: migrate
+      DATABASE_URL: postgresql://root@cockroach:26258/astraxis?sslmode=disable
+    depends_on:
+      - cockroach
+      - cockroach-init
+
   redis:
     image: redis:7
 
@@ -45,6 +54,7 @@ services:
     depends_on:
       - cockroach
       - redis
+      - migrator
     ports:
       - "3001:3001"
 

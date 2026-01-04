@@ -15,8 +15,29 @@ services:
       timeout: 3s
       retries: 10
 
+  cockroach-init:
+    image: cockroachdb/cockroach:v23.1.11
+    depends_on:
+      - cockroach
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      until /cockroach/cockroach sql --insecure --host=cockroach:26258 -e "SELECT 1" >/dev/null 2>&1; do
+        echo "Waiting for CockroachDB..."
+        sleep 1
+      done
+      /cockroach/cockroach sql --insecure --host=cockroach:26258 -e "CREATE DATABASE IF NOT EXISTS astraxis;"
+
   redis:
     image: redis:7
+
+  migrator:
+    image: ghcr.io/rangedace/astraxis:latest
+    environment:
+      ROLE: migrate
+      DATABASE_URL: postgresql://root@cockroach:26258/astraxis?sslmode=disable
+    depends_on:
+      - cockroach
+      - cockroach-init
 
   backend:
     image: ghcr.io/rangedace/astraxis:latest
@@ -33,6 +54,7 @@ services:
     depends_on:
       - cockroach
       - redis
+      - migrator
     ports:
       - "3001:3001"
 
