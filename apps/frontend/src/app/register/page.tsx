@@ -34,10 +34,10 @@ export default function RegisterPage() {
     setError(null);
     try {
       const data = await registerWithUniverse(email, password, nickname, universeId || undefined);
-      const universeId = data.player.universeId;
+      const universeIdFromResponse = data.player.universeId;
       const planetId = data.planet?.id || data.player.planets?.[0]?.id;
-      if (universeId && planetId) {
-        router.push(`/overview?universe=${universeId}&planet=${planetId}`);
+      if (universeIdFromResponse && planetId) {
+        router.push(`/overview?universe=${universeIdFromResponse}&planet=${planetId}`);
       } else {
         router.push('/overview');
       }
@@ -72,7 +72,7 @@ export default function RegisterPage() {
             {universes.length === 0 && <option value="">Chargement...</option>}
             {universes.map((uni) => (
               <option key={uni.id} value={uni.id}>
-                {uni.name} · x{uni.speedBuild} build · x{uni.speedResearch} research
+                {uni.name} - x{uni.speedBuild} build - x{uni.speedResearch} research
               </option>
             ))}
           </select>
@@ -100,10 +100,10 @@ export default function RegisterPage() {
         </div>
         {error && <div className="danger">{error}</div>}
         <button className="btn primary" type="submit" disabled={loading}>
-          {loading ? 'Création...' : 'Créer le compte'}
+          {loading ? 'Creation...' : 'Creer le compte'}
         </button>
         <div className="muted">
-          D&eacute;j&agrave; inscrit ? <Link href="/login">Connexion</Link>
+          Deja inscrit ? <Link href="/login">Connexion</Link>
         </div>
       </form>
     </div>
