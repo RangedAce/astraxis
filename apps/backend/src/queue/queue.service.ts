@@ -54,7 +54,7 @@ export class QueueService {
         });
         const planet = await tx.planet.findUnique({ where: { id: item.planetId } });
         if (planet) {
-          await this.universeService.recomputeProduction(tx, planet.id, planet.temperature);
+          await this.universeService.recomputeProduction(tx, planet.id);
         }
       } else if (item.type === QueueType.RESEARCH) {
         await tx.researchLevel.upsert({
