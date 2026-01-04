@@ -113,7 +113,7 @@ export class UniverseService {
       )
     );
 
-    await this.recomputeProduction(tx, planet.id, temperature);
+    await this.recomputeProduction(tx, planet.id);
     return planet;
   }
 
@@ -147,8 +147,7 @@ export class UniverseService {
 
   async recomputeProduction(
     tx: Prisma.TransactionClient,
-    planetId: string,
-    temperature?: number
+    planetId: string
   ) {
     const [levels, settings, planet] = await Promise.all([
       tx.buildingLevel.findMany({ where: { planetId } }),
