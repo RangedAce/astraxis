@@ -31,6 +31,7 @@ pnpm run dev   # démarre backend + frontend en parallèle
 ## Backend (NestJS)
 - Dossier: `apps/backend`
 - Auth: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/me
+- Univers: GET /universes, POST /universes (header `x-admin-token`, env `ADMIN_TOKEN`)
 - Gameplay: /universe/:id/planet/:planetId/overview, /planet/:planetId/buildings/start, /player/research/start, /planet/:planetId/ships/start, /planet/:planetId/queue
 - WebSocket namespace `/socket` (Socket.IO + Redis adapter). Rooms par `playerId`.
 - Jobs BullMQ (Redis) pour finaliser les QueueItem à `endAt`.
@@ -39,6 +40,7 @@ pnpm run dev   # démarre backend + frontend en parallèle
 ## Frontend (Next.js)
 - Dossier: `apps/frontend`
 - Pages: `/login`, `/register`, `/overview` (ressources live, boutons construction/recherche/vaisseaux, file d’attente avec countdown).
+- Page admin: `/admin/universes` (creation d univers, token requis).
 - Socket.IO client pour mises à jour en temps réel. API base configurable via `NEXT_PUBLIC_API_URL`.
 
 ## Docker / déploiement
@@ -49,6 +51,7 @@ pnpm run dev   # démarre backend + frontend en parallèle
   - `docker-compose.frontend.yml` : frontend seul (à pointer vers un backend existant via `NEXT_PUBLIC_API_URL`).
 - Volumes : `astraxis_db_data` pour persister Cockroach.
 - Ports par défaut : backend 3001, frontend 32601, Cockroach SQL 26257, UI 8080.
+- Variable admin : `ADMIN_TOKEN` (utilisée par `/admin/universes` pour créer des univers).
 
 ## Notes
 - TypeScript strict partout (base tsconfig partagé).

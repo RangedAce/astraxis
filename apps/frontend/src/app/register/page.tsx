@@ -2,23 +2,38 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
-import { register } from '../../lib/api';
+import { FormEvent, useEffect, useState } from 'react';
+import { fetchUniverses, registerWithUniverse } from '../../lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
+  const [universeId, setUniverseId] = useState<string>('');
+  const [universes, setUniverses] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchUniverses()
+      .then((data) => {
+        setUniverses(data);
+        if (data?.[0]?.id) {
+          setUniverseId(data[0].id);
+        }
+      })
+      .catch(() => {
+        setUniverses([]);
+      });
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      const data = await register(email, password, nickname);
+      const data = await registerWithUniverse(email, password, nickname, universeId || undefined);
       const universeId = data.player.universeId;
       const planetId = data.planet?.id || data.player.planets?.[0]?.id;
       if (universeId && planetId) {
@@ -46,6 +61,21 @@ export default function RegisterPage() {
             onChange={(e) => setNickname(e.target.value)}
             required
           />
+        </div>
+        <div className="field">
+          <label>Univers</label>
+          <select
+            className="input"
+            value={universeId}
+            onChange={(e) => setUniverseId(e.target.value)}
+          >
+            {universes.length === 0 && <option value="">Chargement...</option>}
+            {universes.map((uni) => (
+              <option key={uni.id} value={uni.id}>
+                {uni.name} · x{uni.speedBuild} build · x{uni.speedResearch} research
+              </option>
+            ))}
+          </select>
         </div>
         <div className="field">
           <label>Email</label>

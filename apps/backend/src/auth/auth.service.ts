@@ -36,7 +36,9 @@ export class AuthService {
     if (exists) {
       throw new BadRequestException('Email already registered');
     }
-    const universe = await this.universeService.getDefaultUniverse();
+    const universe = dto.universeId
+      ? await this.universeService.getUniverseById(dto.universeId)
+      : await this.universeService.getDefaultUniverse();
     if (!universe) {
       throw new BadRequestException('Universe not initialized');
     }

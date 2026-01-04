@@ -1,11 +1,14 @@
 import {
   BuildingKey,
+  ProductionFactors,
   ProductionRates,
   QueueCategory,
   ResearchKey,
   ResourceAmount,
-  ShipKey
+  ShipKey,
+  StorageCapacities
 } from './types';
+import { BUILDING_KEYS, RESEARCH_KEYS, SHIP_KEYS } from './metadata';
 
 const BASE_BUILDINGS: Record<
   BuildingKey,
@@ -34,6 +37,24 @@ const BASE_BUILDINGS: Record<
     costFactor: 1.5,
     baseTime: 70,
     timeFactor: 1.5
+  },
+  [BuildingKey.MetalStorage]: {
+    cost: { metal: 1000, crystal: 0, deuterium: 0 },
+    costFactor: 2,
+    baseTime: 120,
+    timeFactor: 1.6
+  },
+  [BuildingKey.CrystalStorage]: {
+    cost: { metal: 1000, crystal: 500, deuterium: 0 },
+    costFactor: 2,
+    baseTime: 140,
+    timeFactor: 1.6
+  },
+  [BuildingKey.DeuteriumTank]: {
+    cost: { metal: 1000, crystal: 1000, deuterium: 0 },
+    costFactor: 2,
+    baseTime: 160,
+    timeFactor: 1.6
   },
   [BuildingKey.RoboticsFactory]: {
     cost: { metal: 400, crystal: 120, deuterium: 200 },
@@ -135,6 +156,27 @@ const BASE_SHIPS: Record<
   }
 };
 
+const STORAGE_BASE_CAPACITY = 10000;
+const STORAGE_FACTOR = 1.6;
+const MINE_OUTPUT_FACTOR = 1.1;
+const MINE_ENERGY_FACTOR = 1.1;
+
+function normalizeProductionFactor(value: number | undefined) {
+  if (value === undefined || Number.isNaN(value)) {
+    return 1;
+  }
+  const clamped = Math.max(0, Math.min(100, value));
+  return clamped / 100;
+}
+
+function calculateMineOutput(base: number, level: number) {
+  return level > 0 ? base * level * Math.pow(MINE_OUTPUT_FACTOR, level) : 0;
+}
+
+function calculateMineEnergy(base: number, level: number) {
+  return level > 0 ? base * level * Math.pow(MINE_ENERGY_FACTOR, level) : 0;
+}
+
 export function calculateCost(
   base: ResourceAmount,
   factor: number,
@@ -203,34 +245,77 @@ export function calculateShipBuildTimeSeconds(
   );
 }
 
+export function positionToTemperature(position: number) {
+  const clamped = Math.max(1, Math.min(15, position));
+  return 45 - (clamped - 1) * 4;
+}
+
+export function getPositionModifiers(position: number) {
+  const normalized = (Math.max(1, Math.min(15, position)) - 1) / 14;
+  const energyModifier = 1 + (1 - normalized) * 0.3;
+  const deutModifier = 1 + normalized * 0.35;
+  return { normalized, energyModifier, deutModifier };
+}
+
 export function calculateProductionFromLevels(
   buildingLevels: Record<string, number>,
-  temperature: number
+  position: number,
+  productionFactors: ProductionFactors = {}
 ): ProductionRates {
   const metalLevel = buildingLevels[BuildingKey.MetalMine] ?? 0;
   const crystalLevel = buildingLevels[BuildingKey.CrystalMine] ?? 0;
   const deutLevel = buildingLevels[BuildingKey.DeuteriumSynthesizer] ?? 0;
   const solarLevel = buildingLevels[BuildingKey.SolarPlant] ?? 0;
-  const tempModifier = 1 + temperature / 200;
 
-  const metalPerHour = metalLevel > 0 ? 30 * metalLevel * Math.pow(1.1, metalLevel) : 0;
-  const crystalPerHour = crystalLevel > 0 ? 20 * crystalLevel * Math.pow(1.1, crystalLevel) : 0;
-  const deutPerHour =
-    deutLevel > 0 ? 10 * deutLevel * Math.pow(1.1, deutLevel) * tempModifier : 0;
-  const energy =
-    solarLevel > 0 ? Math.round(20 * solarLevel * Math.pow(1.1, solarLevel) * tempModifier) : 0;
+  const metalFactor = normalizeProductionFactor(productionFactors[BuildingKey.MetalMine]);
+  const crystalFactor = normalizeProductionFactor(productionFactors[BuildingKey.CrystalMine]);
+  const deutFactor = normalizeProductionFactor(productionFactors[BuildingKey.DeuteriumSynthesizer]);
+
+  const { energyModifier, deutModifier } = getPositionModifiers(position);
+
+  const baseMetal = calculateMineOutput(30, metalLevel) * metalFactor;
+  const baseCrystal = calculateMineOutput(20, crystalLevel) * crystalFactor;
+  const baseDeut = calculateMineOutput(10, deutLevel) * deutFactor * deutModifier;
+
+  const energyUsed =
+    calculateMineEnergy(10, metalLevel) * metalFactor +
+    calculateMineEnergy(10, crystalLevel) * crystalFactor +
+    calculateMineEnergy(20, deutLevel) * deutFactor;
+
+  const energyProduced =
+    solarLevel > 0
+      ? 20 * solarLevel * Math.pow(MINE_OUTPUT_FACTOR, solarLevel) * energyModifier
+      : 0;
+
+  const energyRatio = energyUsed > 0 ? Math.min(1, energyProduced / energyUsed) : 1;
 
   return {
-    metalPerHour,
-    crystalPerHour,
-    deutPerHour,
-    energy
+    metalPerHour: baseMetal * energyRatio,
+    crystalPerHour: baseCrystal * energyRatio,
+    deutPerHour: baseDeut * energyRatio,
+    energy: Math.round(energyProduced - energyUsed),
+    energyProduced: Math.round(energyProduced),
+    energyUsed: Math.round(energyUsed)
   };
 }
 
-export const BUILDING_LIST = Object.keys(BASE_BUILDINGS) as BuildingKey[];
-export const RESEARCH_LIST = Object.keys(BASE_RESEARCH) as ResearchKey[];
-export const SHIP_LIST = Object.keys(BASE_SHIPS) as ShipKey[];
+export function calculateStorageCapacity(level: number) {
+  return Math.floor(STORAGE_BASE_CAPACITY * Math.pow(STORAGE_FACTOR, Math.max(level, 0)));
+}
+
+export function calculateStorageCapacities(
+  buildingLevels: Record<string, number>
+): StorageCapacities {
+  return {
+    metal: calculateStorageCapacity(buildingLevels[BuildingKey.MetalStorage] ?? 0),
+    crystal: calculateStorageCapacity(buildingLevels[BuildingKey.CrystalStorage] ?? 0),
+    deuterium: calculateStorageCapacity(buildingLevels[BuildingKey.DeuteriumTank] ?? 0)
+  };
+}
+
+export const BUILDING_LIST = BUILDING_KEYS;
+export const RESEARCH_LIST = RESEARCH_KEYS;
+export const SHIP_LIST = SHIP_KEYS;
 
 export function resourceDeltaPerSeconds(production: ProductionRates, seconds: number) {
   const hours = seconds / 3600;

@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, Universe } from '@prisma/client';
-import { BuildingKey, calculateProductionFromLevels } from '@astraxis/shared';
+import { BuildingKey, calculateProductionFromLevels, positionToTemperature } from '@astraxis/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 const MAX_POSITIONS = 15;
+const MAX_SYSTEMS = 499;
 
 @Injectable()
 export class UniverseService {
@@ -15,20 +16,61 @@ export class UniverseService {
     });
   }
 
-  async createStarterPlanet(tx: Prisma.TransactionClient, universe: Universe, playerId: string) {
-    const slot = await this.findNextSlot(tx, universe.id);
-    const temperature = this.computeTemperature(slot.position);
-    const planet = await tx.planet.create({
+  async getUniverseById(id: string) {
+    return this.prisma.universe.findUnique({ where: { id } });
+  }
+
+  async listUniverses() {
+    return this.prisma.universe.findMany({
+      orderBy: { createdAt: 'asc' }
+    });
+  }
+
+  async createUniverse(dto: {
+    name: string;
+    speedFleet: number;
+    speedBuild: number;
+    speedResearch: number;
+    isPeacefulDefault: boolean;
+  }) {
+    return this.prisma.universe.create({
       data: {
-        universeId: universe.id,
-        playerId,
-        galaxy: slot.galaxy,
-        system: slot.system,
-        position: slot.position,
-        name: 'Homeworld',
-        temperature
+        name: dto.name,
+        speedFleet: dto.speedFleet,
+        speedBuild: dto.speedBuild,
+        speedResearch: dto.speedResearch,
+        isPeacefulDefault: dto.isPeacefulDefault
       }
     });
+  }
+
+  async createStarterPlanet(tx: Prisma.TransactionClient, universe: Universe, playerId: string) {
+    let planet = null as any;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const slot = await this.findRandomSlot(tx, universe.id);
+      const temperature = this.computeTemperature(slot.position);
+      try {
+        planet = await tx.planet.create({
+          data: {
+            universeId: universe.id,
+            playerId,
+            galaxy: slot.galaxy,
+            system: slot.system,
+            position: slot.position,
+            name: 'Homeworld',
+            temperature
+          }
+        });
+        break;
+      } catch (err: any) {
+        if (err?.code !== 'P2002') {
+          throw err;
+        }
+      }
+    }
+    if (!planet) {
+      throw new Error('Unable to allocate starter planet slot');
+    }
 
     const now = new Date();
     await tx.resourceBalance.create({
@@ -75,38 +117,32 @@ export class UniverseService {
     return planet;
   }
 
-  private async findNextSlot(tx: Prisma.TransactionClient, universeId: string) {
-    const planets = await tx.planet.findMany({
-      where: { universeId },
-      orderBy: [
-        { galaxy: 'asc' },
-        { system: 'asc' },
-        { position: 'asc' }
-      ]
-    });
+  private async findRandomSlot(tx: Prisma.TransactionClient, universeId: string) {
     let galaxy = 1;
     let system = 1;
-    let position = 1;
-    for (const planet of planets) {
-      if (planet.galaxy === galaxy && planet.system === system && planet.position === position) {
-        position += 1;
-        if (position > MAX_POSITIONS) {
-          position = 1;
-          system += 1;
-          if (system > 499) {
-            system = 1;
-            galaxy += 1;
-          }
+    while (system <= MAX_SYSTEMS) {
+      const planets = await tx.planet.findMany({
+        where: { universeId, galaxy, system },
+        select: { position: true }
+      });
+      const taken = new Set(planets.map((p) => p.position));
+      const available: number[] = [];
+      for (let pos = 1; pos <= MAX_POSITIONS; pos += 1) {
+        if (!taken.has(pos)) {
+          available.push(pos);
         }
-      } else {
-        break;
       }
+      if (available.length > 0) {
+        const position = available[Math.floor(Math.random() * available.length)];
+        return { galaxy, system, position };
+      }
+      system += 1;
     }
-    return { galaxy, system, position };
+    return { galaxy: 1, system: 1, position: 1 };
   }
 
   private computeTemperature(position: number) {
-    return 40 - (position - 1) * 3;
+    return positionToTemperature(position);
   }
 
   async recomputeProduction(
@@ -114,7 +150,11 @@ export class UniverseService {
     planetId: string,
     temperature?: number
   ) {
-    const levels = await tx.buildingLevel.findMany({ where: { planetId } });
+    const [levels, settings, planet] = await Promise.all([
+      tx.buildingLevel.findMany({ where: { planetId } }),
+      tx.buildingSetting.findMany({ where: { planetId } }),
+      tx.planet.findUnique({ where: { id: planetId } })
+    ]);
     const levelMap = levels.reduce<Record<string, number>>(
       (acc: Record<string, number>, curr) => {
         acc[curr.buildingKey] = curr.level;
@@ -122,9 +162,15 @@ export class UniverseService {
       },
       {}
     );
-    const planet = await tx.planet.findUnique({ where: { id: planetId } });
-    const temp = temperature ?? planet?.temperature ?? 20;
-    const production = calculateProductionFromLevels(levelMap, temp);
+    const factorMap = settings.reduce<Record<string, number>>(
+      (acc: Record<string, number>, curr) => {
+        acc[curr.buildingKey] = curr.productionFactor;
+        return acc;
+      },
+      {}
+    );
+    const position = planet?.position ?? 1;
+    const production = calculateProductionFromLevels(levelMap, position, factorMap);
     await tx.production.upsert({
       where: { planetId },
       create: {

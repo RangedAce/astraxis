@@ -4,6 +4,7 @@ import { PlanetService } from './planet.service';
 import { StartBuildingDto } from './dto/start-building.dto';
 import { StartShipsDto } from './dto/start-ships.dto';
 import { StartResearchDto } from './dto/start-research.dto';
+import { UpdateProductionDto } from './dto/update-production.dto';
 
 @Controller()
 export class PlanetController {
@@ -28,6 +29,17 @@ export class PlanetController {
   startShips(@Param('planetId') planetId: string, @Req() req: any, @Body() dto: StartShipsDto) {
     const playerId = req.user.playerId as string;
     return this.planetService.startShips(playerId, planetId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('planet/:planetId/production')
+  updateProduction(
+    @Param('planetId') planetId: string,
+    @Req() req: any,
+    @Body() dto: UpdateProductionDto
+  ) {
+    const playerId = req.user.playerId as string;
+    return this.planetService.updateProductionFactor(playerId, planetId, dto);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -56,6 +56,7 @@ model Planet {
   resources    ResourceBalance?
   production   Production?
   buildings    BuildingLevel[]
+  buildingSettings BuildingSetting[]
   ships        ShipCount[]
   queueItems   QueueItem[]
 
@@ -86,6 +87,15 @@ model BuildingLevel {
   buildingKey String
   level       Int      @default(0)
   planet      Planet   @relation(fields: [planetId], references: [id])
+
+  @@id([planetId, buildingKey])
+}
+
+model BuildingSetting {
+  planetId         String
+  buildingKey      String
+  productionFactor Int      @default(100)
+  planet           Planet   @relation(fields: [planetId], references: [id])
 
   @@id([planetId, buildingKey])
 }

@@ -12,5 +12,6 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
     url: process.env.REDIS_URL ?? 'redis://localhost:6379',
     bullPrefix: process.env.BULLMQ_PREFIX ?? 'astraxis'
-  }
+  },
+  adminToken: process.env.ADMIN_TOKEN ?? ''
 });

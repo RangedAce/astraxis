@@ -12,6 +12,7 @@ import {
   calculateBuildingCost,
   calculateBuildingTimeSeconds,
   calculateProductionFromLevels,
+  calculateStorageCapacities,
   calculateResearchCost,
   calculateResearchTimeSeconds,
   calculateShipBuildTimeSeconds,
@@ -28,6 +29,7 @@ import { RealtimeService } from '../ws/realtime.service';
 import { StartBuildingDto } from './dto/start-building.dto';
 import { StartShipsDto } from './dto/start-ships.dto';
 import { StartResearchDto } from './dto/start-research.dto';
+import { UpdateProductionDto } from './dto/update-production.dto';
 
 @Injectable()
 export class PlanetService {
@@ -67,44 +69,46 @@ export class PlanetService {
     if (!resource) {
       throw new NotFoundException('Resource balance missing');
     }
+    const [planet, levels, settings] = await Promise.all([
+      tx.planet.findUnique({ where: { id: planetId } }),
+      tx.buildingLevel.findMany({ where: { planetId } }),
+      tx.buildingSetting.findMany({ where: { planetId } })
+    ]);
+    if (!planet) {
+      throw new NotFoundException('Planet not found');
+    }
+    const levelMap = levels.reduce<Record<string, number>>(
+      (acc: Record<string, number>, curr) => {
+        acc[curr.buildingKey] = curr.level;
+        return acc;
+      },
+      {}
+    );
+    const factorMap = settings.reduce<Record<string, number>>(
+      (acc: Record<string, number>, curr) => {
+        acc[curr.buildingKey] = curr.productionFactor;
+        return acc;
+      },
+      {}
+    );
+    const storage = calculateStorageCapacities(levelMap);
     let production = await tx.production.findUnique({ where: { planetId } });
     if (!production) {
-      const planet = await tx.planet.findUnique({ where: { id: planetId } });
+      const computed = calculateProductionFromLevels(levelMap, planet.position, factorMap);
       production = await tx.production.create({
         data: {
           planetId,
-          metalPerHour: new Prisma.Decimal(0),
-          crystalPerHour: new Prisma.Decimal(0),
-          deutPerHour: new Prisma.Decimal(0),
-          energy: 0,
+          metalPerHour: new Prisma.Decimal(computed.metalPerHour),
+          crystalPerHour: new Prisma.Decimal(computed.crystalPerHour),
+          deutPerHour: new Prisma.Decimal(computed.deutPerHour),
+          energy: computed.energy,
           lastCalculatedAt: now
         }
       });
-      if (planet) {
-        const levels = await tx.buildingLevel.findMany({ where: { planetId } });
-        const levelMap = levels.reduce<Record<string, number>>(
-          (acc: Record<string, number>, curr) => {
-            acc[curr.buildingKey] = curr.level;
-            return acc;
-          },
-          {}
-        );
-        const computed = calculateProductionFromLevels(levelMap, planet.temperature);
-        production = await tx.production.update({
-          where: { planetId },
-          data: {
-            metalPerHour: new Prisma.Decimal(computed.metalPerHour),
-            crystalPerHour: new Prisma.Decimal(computed.crystalPerHour),
-            deutPerHour: new Prisma.Decimal(computed.deutPerHour),
-            energy: computed.energy,
-            lastCalculatedAt: now
-          }
-        });
-      }
     }
     const elapsedSeconds = (now.getTime() - resource.lastCalculatedAt.getTime()) / 1000;
     if (elapsedSeconds <= 0) {
-      return { resource, production };
+      return { resource, production, storage, levelMap, factorMap };
     }
     const delta = resourceDeltaPerSeconds(
       {
@@ -118,9 +122,15 @@ export class PlanetService {
     const updated = await tx.resourceBalance.update({
       where: { planetId },
       data: {
-        metal: new Prisma.Decimal(Number(resource.metal) + delta.metal),
-        crystal: new Prisma.Decimal(Number(resource.crystal) + delta.crystal),
-        deuterium: new Prisma.Decimal(Number(resource.deuterium) + delta.deuterium),
+        metal: new Prisma.Decimal(
+          Math.min(Number(resource.metal) + delta.metal, storage.metal)
+        ),
+        crystal: new Prisma.Decimal(
+          Math.min(Number(resource.crystal) + delta.crystal, storage.crystal)
+        ),
+        deuterium: new Prisma.Decimal(
+          Math.min(Number(resource.deuterium) + delta.deuterium, storage.deuterium)
+        ),
         lastCalculatedAt: now
       }
     });
@@ -128,15 +138,22 @@ export class PlanetService {
       where: { planetId },
       data: { lastCalculatedAt: now }
     });
-    return { resource: updated, production: { ...production, lastCalculatedAt: now } };
+    return {
+      resource: updated,
+      production: { ...production, lastCalculatedAt: now },
+      storage,
+      levelMap,
+      factorMap
+    };
   }
 
   async getOverview(playerId: string, planetId: string) {
     const planet = await this.ensurePlanetOwnership(planetId, playerId);
     const now = new Date();
-    const { resource, production } = await this.prisma.serializableTransaction((tx) =>
-      this.applyProductionTx(tx, planet.id, now)
-    );
+    const { resource, storage, levelMap, factorMap } =
+      await this.prisma.serializableTransaction((tx) =>
+        this.applyProductionTx(tx, planet.id, now)
+      );
     const [buildings, researchLevels, queue] = await Promise.all([
       this.prisma.buildingLevel.findMany({ where: { planetId } }),
       this.prisma.researchLevel.findMany({ where: { playerId } }),
@@ -145,15 +162,20 @@ export class PlanetService {
         orderBy: { endAt: 'asc' }
       })
     ]);
+    const computed = calculateProductionFromLevels(levelMap, planet.position, factorMap);
     return {
       planet,
       resources: this.toResourceAmount(resource),
       production: {
-        metalPerHour: Number(production.metalPerHour),
-        crystalPerHour: Number(production.crystalPerHour),
-        deutPerHour: Number(production.deutPerHour),
-        energy: production.energy
+        metalPerHour: computed.metalPerHour,
+        crystalPerHour: computed.crystalPerHour,
+        deutPerHour: computed.deutPerHour,
+        energy: computed.energy,
+        energyProduced: computed.energyProduced ?? 0,
+        energyUsed: computed.energyUsed ?? 0
       },
+      storage,
+      productionFactors: factorMap,
       buildings,
       researchLevels,
       queue
@@ -170,15 +192,26 @@ export class PlanetService {
       if (!planet) {
         throw new UnauthorizedException('Planet not owned');
       }
-      await this.queueService.ensureNoPending(tx, playerId, planetId, QueueType.BUILDING);
       const { resource } = await this.applyProductionTx(tx, planetId, now);
+      const pendingCount = await tx.queueItem.count({
+        where: {
+          planetId,
+          type: QueueType.BUILDING,
+          status: QueueStatus.PENDING,
+          key: dto.buildingKey
+        }
+      });
+      const tail = await tx.queueItem.findFirst({
+        where: { planetId, type: QueueType.BUILDING, status: QueueStatus.PENDING },
+        orderBy: { endAt: 'desc' }
+      });
       const currentLevel =
         (
           await tx.buildingLevel.findUnique({
             where: { planetId_buildingKey: { planetId, buildingKey: dto.buildingKey } }
           })
         )?.level ?? 0;
-      const nextLevel = currentLevel + 1;
+      const nextLevel = currentLevel + pendingCount + 1;
       const cost = calculateBuildingCost(dto.buildingKey, nextLevel);
       const available = this.toResourceAmount(resource);
       if (!hasEnoughResources(available, cost)) {
@@ -199,8 +232,8 @@ export class PlanetService {
         nextLevel,
         planet.universe.speedBuild
       );
-      const startAt = now;
-      const endAt = new Date(now.getTime() + durationSec * 1000);
+      const startAt = tail && tail.endAt > now ? tail.endAt : now;
+      const endAt = new Date(startAt.getTime() + durationSec * 1000);
       const queueItem = await tx.queueItem.create({
         data: {
           type: QueueType.BUILDING,
@@ -396,6 +429,38 @@ export class PlanetService {
       at: now.toISOString()
     });
     return queueItem;
+  }
+
+  async updateProductionFactor(playerId: string, planetId: string, dto: UpdateProductionDto) {
+    const allowed = new Set([
+      BuildingKey.MetalMine,
+      BuildingKey.CrystalMine,
+      BuildingKey.DeuteriumSynthesizer
+    ]);
+    if (!allowed.has(dto.buildingKey)) {
+      throw new BadRequestException('Production settings not available for this building');
+    }
+    const factor = Math.max(0, Math.min(100, Math.floor(dto.factor)));
+    const now = new Date();
+    await this.prisma.serializableTransaction(async (tx) => {
+      const planet = await tx.planet.findFirst({ where: { id: planetId, playerId } });
+      if (!planet) {
+        throw new UnauthorizedException('Planet not owned');
+      }
+      await this.applyProductionTx(tx, planetId, now);
+      await tx.buildingSetting.upsert({
+        where: { planetId_buildingKey: { planetId, buildingKey: dto.buildingKey } },
+        create: { planetId, buildingKey: dto.buildingKey, productionFactor: factor },
+        update: { productionFactor: factor }
+      });
+      await this.universeService.recomputeProduction(tx, planetId);
+    });
+    const pending = await this.prisma.queueItem.findMany({
+      where: { planetId, status: QueueStatus.PENDING },
+      orderBy: { endAt: 'asc' }
+    });
+    this.realtime.emitQueueUpdate(playerId, pending);
+    return { buildingKey: dto.buildingKey, factor };
   }
 
   async listQueue(planetId: string, playerId: string) {

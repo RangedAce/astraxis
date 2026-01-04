@@ -5,7 +5,10 @@ export enum BuildingKey {
   SolarPlant = 'solar_plant',
   RoboticsFactory = 'robotics_factory',
   Shipyard = 'shipyard',
-  ResearchLab = 'research_lab'
+  ResearchLab = 'research_lab',
+  MetalStorage = 'metal_storage',
+  CrystalStorage = 'crystal_storage',
+  DeuteriumTank = 'deuterium_tank'
 }
 
 export enum ResearchKey {
@@ -32,6 +35,11 @@ export enum QueueCategory {
   Ship = 'SHIP'
 }
 
+export enum BuildingCategory {
+  Production = 'production',
+  Installation = 'installation'
+}
+
 export type ResourceAmount = {
   metal: number;
   crystal: number;
@@ -43,4 +51,36 @@ export type ProductionRates = {
   crystalPerHour: number;
   deutPerHour: number;
   energy: number;
+  energyProduced?: number;
+  energyUsed?: number;
+};
+
+export type StorageCapacities = {
+  metal: number;
+  crystal: number;
+  deuterium: number;
+};
+
+export type ProductionFactors = Partial<Record<BuildingKey, number>>;
+
+export type BuildingMeta = {
+  key: BuildingKey;
+  label: string;
+  description: string;
+  category: BuildingCategory;
+  imageUrl?: string;
+};
+
+export type ResearchMeta = {
+  key: ResearchKey;
+  label: string;
+  description: string;
+  imageUrl?: string;
+};
+
+export type ShipMeta = {
+  key: ShipKey;
+  label: string;
+  description: string;
+  imageUrl?: string;
 };

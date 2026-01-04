@@ -35,6 +35,7 @@ services:
       DATABASE_URL: postgresql://root@cockroach:26258/astraxis?sslmode=disable
       JWT_SECRET: change_me_secret
       JWT_REFRESH_SECRET: change_me_refresh
+      ADMIN_TOKEN: change_me_admin
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       REDIS_PORT: 6379

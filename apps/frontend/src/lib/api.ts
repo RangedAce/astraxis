@@ -79,6 +79,26 @@ export async function register(email: string, password: string, nickname: string
   return data;
 }
 
+export async function registerWithUniverse(
+  email: string,
+  password: string,
+  nickname: string,
+  universeId?: string
+) {
+  const data = await apiFetch('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, nickname, universeId })
+  });
+  const session = {
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    playerId: data.player.id,
+    planetId: data.planet?.id
+  };
+  saveSession(session);
+  return data;
+}
+
 export async function refreshToken(refreshTokenValue: string) {
   try {
     const res = await fetch(`${resolveApiBase()}/auth/refresh`, {
@@ -96,6 +116,25 @@ export async function refreshToken(refreshTokenValue: string) {
   }
 }
 
+export async function fetchUniverses() {
+  return apiFetch('/universes');
+}
+
+export async function createUniverse(payload: {
+  name: string;
+  speedFleet: number;
+  speedBuild: number;
+  speedResearch: number;
+  isPeacefulDefault: boolean;
+  adminToken: string;
+}) {
+  const { adminToken, ...body } = payload;
+  return apiFetch('/universes', {
+    method: 'POST',
+    headers: { 'x-admin-token': adminToken },
+    body: JSON.stringify(body)
+  });
+}
 export async function fetchOverview(universeId: string, planetId: string) {
   return apiFetch(`/universe/${universeId}/planet/${planetId}/overview`);
 }
@@ -118,6 +157,17 @@ export async function startShips(planetId: string, shipKey: string, qty: number)
   return apiFetch(`/planet/${planetId}/ships/start`, {
     method: 'POST',
     body: JSON.stringify({ shipKey, qty })
+  });
+}
+
+export async function updateProductionFactor(
+  planetId: string,
+  buildingKey: string,
+  factor: number
+) {
+  return apiFetch(`/planet/${planetId}/production`, {
+    method: 'POST',
+    body: JSON.stringify({ buildingKey, factor })
   });
 }
 
