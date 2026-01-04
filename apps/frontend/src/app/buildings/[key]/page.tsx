@@ -148,7 +148,7 @@ export default function BuildingDetailPage() {
   );
 
   async function handleStart() {
-    if (!planetId) return;
+    if (!planetId || !buildingKey) return;
     setError(null);
     try {
       await startBuilding(planetId, buildingKey);
@@ -159,7 +159,7 @@ export default function BuildingDetailPage() {
   }
 
   async function handleUpdateFactor() {
-    if (!planetId || !isMine) return;
+    if (!planetId || !buildingKey || !isMine) return;
     setError(null);
     try {
       await updateProductionFactor(planetId, buildingKey, factor);
