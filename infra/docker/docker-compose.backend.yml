@@ -20,6 +20,7 @@ services:
 
   backend:
     image: ghcr.io/rangedace/astraxis:latest
+    pull_policy: always
     environment:
       ROLE: backend
       PORT: 3001

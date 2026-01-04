@@ -6,8 +6,18 @@ function getRuntimeApiBase() {
   return typeof runtime === 'string' && runtime.length > 0 ? runtime : null;
 }
 
-const API_BASE =
-  getRuntimeApiBase() || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const FALLBACK_API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+
+function resolveApiBase() {
+  const runtime = getRuntimeApiBase();
+  if (runtime) return runtime;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const protocol = window.location.protocol;
+    return `${protocol}//${host}:3001/api`;
+  }
+  return FALLBACK_API_BASE;
+}
 
 async function apiFetch(path: string, options: RequestInit = {}, retry = true): Promise<any> {
   const session = loadSession();
@@ -20,7 +30,7 @@ async function apiFetch(path: string, options: RequestInit = {}, retry = true): 
   if (session?.accessToken) {
     headers['Authorization'] = `Bearer ${session.accessToken}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${resolveApiBase()}${path}`, {
     ...options,
     headers
   });
@@ -71,7 +81,7 @@ export async function register(email: string, password: string, nickname: string
 
 export async function refreshToken(refreshTokenValue: string) {
   try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
+    const res = await fetch(`${resolveApiBase()}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: refreshTokenValue })
@@ -112,5 +122,5 @@ export async function startShips(planetId: string, shipKey: string, qty: number)
 }
 
 export function getApiBase() {
-  return API_BASE;
+  return resolveApiBase();
 }
