@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import io from 'socket.io-client';
 import {
@@ -15,16 +14,21 @@ import {
   SHIP_KEYS,
   SHIP_META,
   ShipKey,
+  calculateBuildingCost,
+  calculateBuildingTimeSeconds,
+  calculateProductionFromLevels,
   calculateResearchCost,
   calculateResearchTimeSeconds,
   calculateShipBuildTimeSeconds,
   calculateShipCost,
+  calculateStorageCapacities,
   getPositionModifiers,
   positionToTemperature
 } from '@astraxis/shared';
 import {
   fetchOverview,
   getApiBase,
+  startBuilding,
   startResearch,
   startShips
 } from '../../lib/api';
@@ -54,6 +58,8 @@ function formatNumber(value: number) {
   return Math.floor(value).toLocaleString('fr-FR');
 }
 
+const FUTURE_LEVELS = 3;
+
 export default function OverviewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -64,6 +70,7 @@ export default function OverviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('constructions');
   const [selectedResearch, setSelectedResearch] = useState<ResearchKey>(ResearchKey.Energy);
+  const [selectedBuilding, setSelectedBuilding] = useState<BuildingKey | null>(null);
   const [selectedShip, setSelectedShip] = useState<ShipKey>(ShipKey.SmallCargo);
   const [shipQty, setShipQty] = useState(1);
   const [now, setNow] = useState(Date.now());
@@ -91,6 +98,17 @@ export default function OverviewPage() {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!selectedBuilding) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedBuilding(null);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedBuilding]);
 
   const reload = useCallback(async () => {
     const session = loadSession();
@@ -176,9 +194,36 @@ export default function OverviewPage() {
     }
   }
 
+  async function handleBuilding(key: BuildingKey) {
+    if (!planetId) return;
+    setError(null);
+    try {
+      await startBuilding(planetId, key);
+      await reload();
+      setSelectedBuilding(null);
+    } catch (err: any) {
+      setError(err.message || 'Impossible de lancer la construction');
+    }
+  }
+
   function logout() {
     clearSession();
     router.push('/login');
+  }
+
+  function formatGain(seconds: number) {
+    const gain = Math.max(0, Math.floor(seconds));
+    return gain > 0 ? `gain ${formatDuration(gain)}` : 'gain 0s';
+  }
+
+  function renderResourceCost(cost: { metal: number; crystal: number; deuterium: number }) {
+    return (
+      <div className="resource-row">
+        <span className="resource-chip metal">Metal {formatNumber(cost.metal)}</span>
+        <span className="resource-chip crystal">Cristal {formatNumber(cost.crystal)}</span>
+        <span className="resource-chip deut">Deut {formatNumber(cost.deuterium)}</span>
+      </div>
+    );
   }
 
   if (loading && !overview) {
@@ -189,6 +234,7 @@ export default function OverviewPage() {
   const universe = planet?.universe;
   const position = planet?.position ?? 1;
   const storage = overview?.storage ?? { metal: 0, crystal: 0, deuterium: 0 };
+  const productionFactors = overview?.productionFactors ?? {};
   const energyProduced = overview?.production?.energyProduced ?? 0;
   const energyUsed = overview?.production?.energyUsed ?? 0;
   const { energyModifier, deutModifier } = getPositionModifiers(position);
@@ -209,6 +255,10 @@ export default function OverviewPage() {
       const level = buildingsMap[key] ?? 0;
       const meta = BUILDING_META[key];
       const factor = overview?.productionFactors?.[key] ?? 100;
+      const isMine =
+        key === BuildingKey.MetalMine ||
+        key === BuildingKey.CrystalMine ||
+        key === BuildingKey.DeuteriumSynthesizer;
       const storage =
         key === BuildingKey.MetalStorage
           ? overview?.storage?.metal
@@ -217,33 +267,32 @@ export default function OverviewPage() {
             : key === BuildingKey.DeuteriumTank
               ? overview?.storage?.deuterium
               : null;
-      const detailHref = `/buildings/${key}?planet=${planetId}&universe=${universeId}`;
       return (
-        <div key={key} className="card row between">
-          <div className="row gap">
-            {meta.imageUrl ? (
-              <img src={meta.imageUrl} alt={meta.label} className="icon" />
-            ) : (
-              <div className="icon placeholder" />
-            )}
-            <div>
-              <div>{meta.label}</div>
-              <div className="muted">Niveau {level}</div>
-              {storage !== null && (
-                <div className="muted">Cap: {formatNumber(storage)}</div>
+        <div key={key} className="card visual">
+          <div className="row between">
+            <div className="row gap">
+              {meta.imageUrl ? (
+                <img src={meta.imageUrl} alt={meta.label} className="icon" />
+              ) : (
+                <div className="icon placeholder" />
               )}
-              {storage === null &&
-                (key === BuildingKey.MetalMine ||
-                  key === BuildingKey.CrystalMine ||
-                  key === BuildingKey.DeuteriumSynthesizer) && (
-                  <div className="muted">Prod: {factor}%</div>
+              <div>
+                <div className="card-title">{meta.label}</div>
+                <div className="muted">Niveau {level}</div>
+                <div className="muted small">Apporte: {meta.description}</div>
+                {storage !== null && (
+                  <div className="muted small">Cap: {formatNumber(storage)}</div>
                 )}
+                {storage === null && isMine && (
+                  <div className="muted small">Prod: {factor}%</div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="row gap">
-            <Link className="btn primary" href={detailHref}>
-              Ameliorer
-            </Link>
+            <div className="row gap">
+              <button className="btn primary" onClick={() => setSelectedBuilding(key)}>
+                Ameliorer
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -255,7 +304,8 @@ export default function OverviewPage() {
       const level = researchMap[key] ?? 0;
       const meta = RESEARCH_META[key];
       return (
-        <div key={key} className="card row between">
+        <div key={key} className="card visual">
+          <div className="row between">
           <div className="row gap">
             {meta.imageUrl ? (
               <img src={meta.imageUrl} alt={meta.label} className="icon" />
@@ -263,8 +313,9 @@ export default function OverviewPage() {
               <div className="icon placeholder" />
             )}
             <div>
-              <div>{meta.label}</div>
+              <div className="card-title">{meta.label}</div>
               <div className="muted">Niveau {level}</div>
+              <div className="muted small">Apporte: {meta.description}</div>
             </div>
           </div>
           <div className="row gap">
@@ -274,6 +325,7 @@ export default function OverviewPage() {
             <button className="btn primary" onClick={() => handleResearch(key)}>
               Lancer
             </button>
+          </div>
           </div>
         </div>
       );
@@ -293,23 +345,43 @@ export default function OverviewPage() {
       labLevel
     );
     const meta = RESEARCH_META[selectedResearch];
+    const futureLevels = Array.from({ length: FUTURE_LEVELS }, (_, idx) => level + idx + 1);
     return (
       <div className="panel">
         <div className="title-bar">
           <h2>{meta.label}</h2>
         </div>
-        <div className="muted">{meta.description}</div>
-        <div className="grid two" style={{ marginTop: 12 }}>
-          <div className="card">
+        <div className="muted">Apporte: {meta.description}</div>
+        <div className="detail-grid" style={{ marginTop: 12 }}>
+          <div className="card highlight">
             <div className="muted">Cout niveau {nextLevel}</div>
-            <div>Metal: {formatNumber(cost.metal)}</div>
-            <div>Cristal: {formatNumber(cost.crystal)}</div>
-            <div>Deut: {formatNumber(cost.deuterium)}</div>
+            {renderResourceCost(cost)}
           </div>
-          <div className="card">
-            <div className="muted">Temps</div>
-            <div>{formatDuration(duration)}</div>
+          <div className="card highlight">
+            <div className="muted">Temps estime</div>
+            <div className="stat">{formatDuration(duration)}</div>
+            <div className="muted small">Labo niv {labLevel}</div>
           </div>
+        </div>
+        <div className="section-title">Prochains niveaux</div>
+        <div className="future-grid">
+          {futureLevels.map((targetLevel) => {
+            const futureCost = calculateResearchCost(selectedResearch, targetLevel);
+            const futureDuration = calculateResearchTimeSeconds(
+              selectedResearch,
+              targetLevel,
+              universe.speedResearch,
+              labLevel
+            );
+            return (
+              <div key={targetLevel} className="card future-card">
+                <div className="future-title">Niveau {targetLevel}</div>
+                <div className="muted small">Apporte: {meta.description}</div>
+                {renderResourceCost(futureCost)}
+                <div className="muted small">Temps: {formatDuration(futureDuration)}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -351,12 +423,10 @@ export default function OverviewPage() {
               value={shipQty}
               onChange={(e) => setShipQty(parseInt(e.target.value, 10))}
             />
-            <div className="card">
+            <div className="card highlight">
               <div className="muted">Cout</div>
-              <div>Metal: {formatNumber(cost.metal)}</div>
-              <div>Cristal: {formatNumber(cost.crystal)}</div>
-              <div>Deut: {formatNumber(cost.deuterium)}</div>
-              <div className="muted" style={{ marginTop: 6 }}>
+              {renderResourceCost(cost)}
+              <div className="muted small" style={{ marginTop: 6 }}>
                 Temps: {formatDuration(duration)}
               </div>
             </div>
@@ -392,6 +462,216 @@ export default function OverviewPage() {
     );
   }
 
+  function renderBuildingModal() {
+    if (!selectedBuilding || !planet || !universe) return null;
+    const meta = BUILDING_META[selectedBuilding];
+    const currentLevel = buildingsMap[selectedBuilding] ?? 0;
+    const nextLevel = currentLevel + 1;
+    const cost = calculateBuildingCost(selectedBuilding, nextLevel);
+    const duration = calculateBuildingTimeSeconds(selectedBuilding, nextLevel, universe.speedBuild);
+    const shipyardLevel = buildingsMap[BuildingKey.Shipyard] ?? 0;
+    const roboticsLevel = buildingsMap[BuildingKey.RoboticsFactory] ?? 0;
+    const labLevel = buildingsMap[BuildingKey.ResearchLab] ?? 0;
+    const sampleShip = ShipKey.SmallCargo;
+    const sampleResearch = ResearchKey.Energy;
+    const sampleResearchLevel = Math.max(1, (researchMap[sampleResearch] ?? 0) + 1);
+    const baseShipTime = calculateShipBuildTimeSeconds(
+      sampleShip,
+      1,
+      universe.speedBuild,
+      shipyardLevel,
+      roboticsLevel
+    );
+    const baseResearchTime = calculateResearchTimeSeconds(
+      sampleResearch,
+      sampleResearchLevel,
+      universe.speedResearch,
+      labLevel
+    );
+    const currentProd = calculateProductionFromLevels(
+      buildingsMap,
+      position,
+      productionFactors
+    );
+    const currentStorage = calculateStorageCapacities(buildingsMap);
+    const isMine =
+      selectedBuilding === BuildingKey.MetalMine ||
+      selectedBuilding === BuildingKey.CrystalMine ||
+      selectedBuilding === BuildingKey.DeuteriumSynthesizer;
+    const isStorage =
+      selectedBuilding === BuildingKey.MetalStorage ||
+      selectedBuilding === BuildingKey.CrystalStorage ||
+      selectedBuilding === BuildingKey.DeuteriumTank;
+
+    const impactForLevel = (targetLevel: number) => {
+      if (isStorage) {
+        const futureStorage = calculateStorageCapacities({
+          ...buildingsMap,
+          [selectedBuilding]: targetLevel
+        });
+        if (selectedBuilding === BuildingKey.MetalStorage) {
+          return [
+            `Metal: ${formatNumber(futureStorage.metal)} (+${formatNumber(
+              futureStorage.metal - currentStorage.metal
+            )})`
+          ];
+        }
+        if (selectedBuilding === BuildingKey.CrystalStorage) {
+          return [
+            `Cristal: ${formatNumber(futureStorage.crystal)} (+${formatNumber(
+              futureStorage.crystal - currentStorage.crystal
+            )})`
+          ];
+        }
+        return [
+          `Deut: ${formatNumber(futureStorage.deuterium)} (+${formatNumber(
+            futureStorage.deuterium - currentStorage.deuterium
+          )})`
+        ];
+      }
+
+      if (isMine || selectedBuilding === BuildingKey.SolarPlant) {
+        const futureProd = calculateProductionFromLevels(
+          { ...buildingsMap, [selectedBuilding]: targetLevel },
+          position,
+          productionFactors
+        );
+        const deltaMetal = Math.round(futureProd.metalPerHour - currentProd.metalPerHour);
+        const deltaCrystal = Math.round(
+          futureProd.crystalPerHour - currentProd.crystalPerHour
+        );
+        const deltaDeut = Math.round(futureProd.deutPerHour - currentProd.deutPerHour);
+        const deltaEnergy = futureProd.energy - currentProd.energy;
+        return [
+          `Metal/h: ${formatNumber(futureProd.metalPerHour)} (${deltaMetal >= 0 ? '+' : ''}${deltaMetal})`,
+          `Cristal/h: ${formatNumber(futureProd.crystalPerHour)} (${deltaCrystal >= 0 ? '+' : ''}${deltaCrystal})`,
+          `Deut/h: ${formatNumber(futureProd.deutPerHour)} (${deltaDeut >= 0 ? '+' : ''}${deltaDeut})`,
+          `Energie: ${futureProd.energy} (${deltaEnergy >= 0 ? '+' : ''}${deltaEnergy})`
+        ];
+      }
+
+      if (selectedBuilding === BuildingKey.RoboticsFactory) {
+        const futureTime = calculateShipBuildTimeSeconds(
+          sampleShip,
+          1,
+          universe.speedBuild,
+          shipyardLevel,
+          targetLevel
+        );
+        return [
+          `Petit transporteur: ${formatDuration(futureTime)} (${formatGain(
+            baseShipTime - futureTime
+          )})`
+        ];
+      }
+
+      if (selectedBuilding === BuildingKey.Shipyard) {
+        const futureTime = calculateShipBuildTimeSeconds(
+          sampleShip,
+          1,
+          universe.speedBuild,
+          targetLevel,
+          roboticsLevel
+        );
+        return [
+          `Petit transporteur: ${formatDuration(futureTime)} (${formatGain(
+            baseShipTime - futureTime
+          )})`
+        ];
+      }
+
+      const futureResearchTime = calculateResearchTimeSeconds(
+        sampleResearch,
+        sampleResearchLevel,
+        universe.speedResearch,
+        targetLevel
+      );
+      return [
+        `Recherche Energie niv ${sampleResearchLevel}: ${formatDuration(
+          futureResearchTime
+        )} (${formatGain(baseResearchTime - futureResearchTime)})`
+      ];
+    };
+
+    const futureLevels = Array.from({ length: FUTURE_LEVELS }, (_, idx) => currentLevel + idx + 1);
+
+    return (
+      <div className="modal-backdrop" onClick={() => setSelectedBuilding(null)}>
+        <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-header">
+            <div className="row gap">
+              {meta.imageUrl ? (
+                <img src={meta.imageUrl} alt={meta.label} className="icon" />
+              ) : (
+                <div className="icon placeholder" />
+              )}
+              <div>
+                <div className="modal-title">{meta.label}</div>
+                <div className="muted small">
+                  Niveau {currentLevel} -&gt; {nextLevel}
+                </div>
+              </div>
+            </div>
+            <button className="btn" onClick={() => setSelectedBuilding(null)}>
+              Fermer
+            </button>
+          </div>
+          <div className="modal-body">
+            <div className="muted">Apporte: {meta.description}</div>
+            <div className="detail-grid" style={{ marginTop: 12 }}>
+              <div className="card highlight">
+                <div className="muted">Cout niveau {nextLevel}</div>
+                {renderResourceCost(cost)}
+              </div>
+              <div className="card highlight">
+                <div className="muted">Temps estime</div>
+                <div className="stat">{formatDuration(duration)}</div>
+                <div className="muted small">Niveau actuel {currentLevel}</div>
+              </div>
+            </div>
+            <div className="card highlight" style={{ marginTop: 12 }}>
+              <div className="muted">Impact</div>
+              {impactForLevel(nextLevel).map((line) => (
+                <div key={line}>{line}</div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn primary" onClick={() => handleBuilding(selectedBuilding)}>
+                Lancer l amelioration
+              </button>
+            </div>
+            <div className="section-title">Prochains niveaux</div>
+            <div className="future-grid">
+              {futureLevels.map((targetLevel) => {
+                const futureCost = calculateBuildingCost(selectedBuilding, targetLevel);
+                const futureDuration = calculateBuildingTimeSeconds(
+                  selectedBuilding,
+                  targetLevel,
+                  universe.speedBuild
+                );
+                const impactLines = impactForLevel(targetLevel);
+                return (
+                  <div key={targetLevel} className="card future-card">
+                    <div className="future-title">Niveau {targetLevel}</div>
+                    {renderResourceCost(futureCost)}
+                    <div className="muted small">Temps: {formatDuration(futureDuration)}</div>
+                    <div className="future-impact">
+                      {impactLines.map((line) => (
+                        <div key={line} className="muted small">
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid">
       <div className="title-bar">
@@ -415,38 +695,32 @@ export default function OverviewPage() {
             </div>
           </div>
           <div className="grid two" style={{ marginTop: 10 }}>
-            <div className="card">
-              <div className="muted">Metal</div>
-              <div className="brand" style={{ fontSize: 20 }}>
-                {formatNumber(resources.metal)}
+            <div className="card resource-card resource-metal">
+              <div className="resource-label">Metal</div>
+              <div className="resource-value">{formatNumber(resources.metal)}</div>
+              <div className="resource-meta">
+                +{Math.round(overview.production.metalPerHour)}/h
               </div>
-              <div className="muted">+{Math.round(overview.production.metalPerHour)}/h</div>
-              <div className="muted">Cap: {formatNumber(storage.metal)}</div>
+              <div className="resource-meta">Cap: {formatNumber(storage.metal)}</div>
             </div>
-            <div className="card">
-              <div className="muted">Cristal</div>
-              <div className="brand" style={{ fontSize: 20 }}>
-                {formatNumber(resources.crystal)}
+            <div className="card resource-card resource-crystal">
+              <div className="resource-label">Cristal</div>
+              <div className="resource-value">{formatNumber(resources.crystal)}</div>
+              <div className="resource-meta">
+                +{Math.round(overview.production.crystalPerHour)}/h
               </div>
-              <div className="muted">+{Math.round(overview.production.crystalPerHour)}/h</div>
-              <div className="muted">Cap: {formatNumber(storage.crystal)}</div>
+              <div className="resource-meta">Cap: {formatNumber(storage.crystal)}</div>
             </div>
-            <div className="card">
-              <div className="muted">Deuterium</div>
-              <div className="brand" style={{ fontSize: 20 }}>
-                {formatNumber(resources.deut)}
-              </div>
-              <div className="muted">+{Math.round(overview.production.deutPerHour)}/h</div>
-              <div className="muted">Cap: {formatNumber(storage.deuterium)}</div>
+            <div className="card resource-card resource-deut">
+              <div className="resource-label">Deuterium</div>
+              <div className="resource-value">{formatNumber(resources.deut)}</div>
+              <div className="resource-meta">+{Math.round(overview.production.deutPerHour)}/h</div>
+              <div className="resource-meta">Cap: {formatNumber(storage.deuterium)}</div>
             </div>
-            <div className="card">
-              <div className="muted">Energie</div>
-              <div className="brand" style={{ fontSize: 20 }}>
-                {overview.production.energy}
-              </div>
-              <div className="muted">
-                Prod: {energyProduced} / Cons: {energyUsed}
-              </div>
+            <div className="card resource-card resource-energy">
+              <div className="resource-label">Energie</div>
+              <div className="resource-value">{overview.production.energy}</div>
+              <div className="resource-meta">Prod: {energyProduced} / Cons: {energyUsed}</div>
             </div>
           </div>
         </div>
@@ -550,6 +824,8 @@ export default function OverviewPage() {
           })}
         </div>
       </div>
+
+      {renderBuildingModal()}
     </div>
   );
 }
