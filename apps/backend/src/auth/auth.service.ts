@@ -107,8 +107,36 @@ export class AuthService {
     return this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        players: true
+        players: {
+          include: { universe: true, planets: true },
+          orderBy: { createdAt: 'asc' }
+        }
       }
     });
+  }
+
+  async updateProfile(
+    userId: string,
+    dto: { email?: string; password?: string }
+  ) {
+    const updates: { email?: string; passwordHash?: string } = {};
+    if (dto.email) {
+      const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (exists && exists.id !== userId) {
+        throw new BadRequestException('Email already registered');
+      }
+      updates.email = dto.email;
+    }
+    if (dto.password) {
+      updates.passwordHash = await argon.hash(dto.password);
+    }
+    if (Object.keys(updates).length === 0) {
+      return this.getProfile(userId);
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: updates
+    });
+    return this.getProfile(userId);
   }
 }

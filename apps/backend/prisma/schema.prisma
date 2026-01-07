@@ -21,6 +21,9 @@ model Universe {
   speedFleet         Int       @default(1)
   speedBuild         Int       @default(1)
   speedResearch      Int       @default(1)
+  speedProduction    Int       @default(1)
+  maxSystems         Int       @default(499)
+  maxPositions       Int       @default(15)
   isPeacefulDefault  Boolean   @default(true)
   createdAt          DateTime  @default(now())
   players            Player[]

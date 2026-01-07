@@ -33,14 +33,8 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await registerWithUniverse(email, password, nickname, universeId || undefined);
-      const universeIdFromResponse = data.player.universeId;
-      const planetId = data.planet?.id || data.player.planets?.[0]?.id;
-      if (universeIdFromResponse && planetId) {
-        router.push(`/overview?universe=${universeIdFromResponse}&planet=${planetId}`);
-      } else {
-        router.push('/overview');
-      }
+      await registerWithUniverse(email, password, nickname, universeId || undefined);
+      router.push('/hub');
     } catch (err: any) {
       setError(err.message || 'Erreur');
     } finally {
@@ -72,7 +66,7 @@ export default function RegisterPage() {
             {universes.length === 0 && <option value="">Chargement...</option>}
             {universes.map((uni) => (
               <option key={uni.id} value={uni.id}>
-                {uni.name} - x{uni.speedBuild} build - x{uni.speedResearch} research
+                {uni.name} - x{uni.speedBuild} build - x{uni.speedResearch} research - x{uni.speedProduction ?? 1} prod - {uni.maxSystems ?? 499} sys
               </option>
             ))}
           </select>

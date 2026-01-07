@@ -3,8 +3,8 @@ import { Prisma, Universe } from '@prisma/client';
 import { BuildingKey, calculateProductionFromLevels, positionToTemperature } from '@astraxis/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
-const MAX_POSITIONS = 15;
-const MAX_SYSTEMS = 499;
+const DEFAULT_MAX_POSITIONS = 15;
+const DEFAULT_MAX_SYSTEMS = 499;
 
 @Injectable()
 export class UniverseService {
@@ -31,6 +31,9 @@ export class UniverseService {
     speedFleet: number;
     speedBuild: number;
     speedResearch: number;
+    speedProduction: number;
+    maxSystems: number;
+    maxPositions: number;
     isPeacefulDefault: boolean;
   }) {
     return this.prisma.universe.create({
@@ -39,9 +42,43 @@ export class UniverseService {
         speedFleet: dto.speedFleet,
         speedBuild: dto.speedBuild,
         speedResearch: dto.speedResearch,
+        speedProduction: dto.speedProduction,
+        maxSystems: dto.maxSystems,
+        maxPositions: dto.maxPositions,
         isPeacefulDefault: dto.isPeacefulDefault
       }
     });
+  }
+
+  async updateUniverse(
+    id: string,
+    dto: Partial<{
+      name: string;
+      speedFleet: number;
+      speedBuild: number;
+      speedResearch: number;
+      speedProduction: number;
+      maxSystems: number;
+      maxPositions: number;
+      isPeacefulDefault: boolean;
+    }>
+  ) {
+    const updated = await this.prisma.universe.update({
+      where: { id },
+      data: dto
+    });
+    if (dto.speedProduction !== undefined) {
+      const planets = await this.prisma.planet.findMany({
+        where: { universeId: id },
+        select: { id: true }
+      });
+      for (const planet of planets) {
+        await this.prisma.serializableTransaction((tx) =>
+          this.recomputeProduction(tx, planet.id)
+        );
+      }
+    }
+    return updated;
   }
 
   async createStarterPlanet(tx: Prisma.TransactionClient, universe: Universe, playerId: string) {
@@ -118,16 +155,19 @@ export class UniverseService {
   }
 
   private async findRandomSlot(tx: Prisma.TransactionClient, universeId: string) {
+    const universe = await tx.universe.findUnique({ where: { id: universeId } });
+    const maxSystems = universe?.maxSystems ?? DEFAULT_MAX_SYSTEMS;
+    const maxPositions = universe?.maxPositions ?? DEFAULT_MAX_POSITIONS;
     let galaxy = 1;
     let system = 1;
-    while (system <= MAX_SYSTEMS) {
+    while (system <= maxSystems) {
       const planets = await tx.planet.findMany({
         where: { universeId, galaxy, system },
         select: { position: true }
       });
       const taken = new Set(planets.map((p) => p.position));
       const available: number[] = [];
-      for (let pos = 1; pos <= MAX_POSITIONS; pos += 1) {
+      for (let pos = 1; pos <= maxPositions; pos += 1) {
         if (!taken.has(pos)) {
           available.push(pos);
         }
@@ -152,7 +192,7 @@ export class UniverseService {
     const [levels, settings, planet] = await Promise.all([
       tx.buildingLevel.findMany({ where: { planetId } }),
       tx.buildingSetting.findMany({ where: { planetId } }),
-      tx.planet.findUnique({ where: { id: planetId } })
+      tx.planet.findUnique({ where: { id: planetId }, include: { universe: true } })
     ]);
     const levelMap = levels.reduce<Record<string, number>>(
       (acc: Record<string, number>, curr) => {
@@ -169,7 +209,14 @@ export class UniverseService {
       {}
     );
     const position = planet?.position ?? 1;
-    const production = calculateProductionFromLevels(levelMap, position, factorMap);
+    const baseProduction = calculateProductionFromLevels(levelMap, position, factorMap);
+    const speedProduction = planet?.universe?.speedProduction ?? 1;
+    const production = {
+      ...baseProduction,
+      metalPerHour: baseProduction.metalPerHour * speedProduction,
+      crystalPerHour: baseProduction.crystalPerHour * speedProduction,
+      deutPerHour: baseProduction.deutPerHour * speedProduction
+    };
     await tx.production.upsert({
       where: { planetId },
       create: {

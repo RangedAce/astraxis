@@ -70,7 +70,7 @@ export class PlanetService {
       throw new NotFoundException('Resource balance missing');
     }
     const [planet, levels, settings] = await Promise.all([
-      tx.planet.findUnique({ where: { id: planetId } }),
+      tx.planet.findUnique({ where: { id: planetId }, include: { universe: true } }),
       tx.buildingLevel.findMany({ where: { planetId } }),
       tx.buildingSetting.findMany({ where: { planetId } })
     ]);
@@ -94,7 +94,14 @@ export class PlanetService {
     const storage = calculateStorageCapacities(levelMap);
     let production = await tx.production.findUnique({ where: { planetId } });
     if (!production) {
-      const computed = calculateProductionFromLevels(levelMap, planet.position, factorMap);
+      const base = calculateProductionFromLevels(levelMap, planet.position, factorMap);
+      const speedProduction = planet.universe?.speedProduction ?? 1;
+      const computed = {
+        ...base,
+        metalPerHour: base.metalPerHour * speedProduction,
+        crystalPerHour: base.crystalPerHour * speedProduction,
+        deutPerHour: base.deutPerHour * speedProduction
+      };
       production = await tx.production.create({
         data: {
           planetId,
@@ -162,7 +169,14 @@ export class PlanetService {
         orderBy: { endAt: 'asc' }
       })
     ]);
-    const computed = calculateProductionFromLevels(levelMap, planet.position, factorMap);
+    const base = calculateProductionFromLevels(levelMap, planet.position, factorMap);
+    const speedProduction = planet.universe?.speedProduction ?? 1;
+    const computed = {
+      ...base,
+      metalPerHour: base.metalPerHour * speedProduction,
+      crystalPerHour: base.crystalPerHour * speedProduction,
+      deutPerHour: base.deutPerHour * speedProduction
+    };
     return {
       planet,
       resources: this.toResourceAmount(resource),

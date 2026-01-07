@@ -17,14 +17,8 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await login(email, password);
-      const universeId = data.player.universeId;
-      const planetId = data.player.planets?.[0]?.id || data.planet?.id;
-      if (universeId && planetId) {
-        router.push(`/overview?universe=${universeId}&planet=${planetId}`);
-      } else {
-        router.push('/overview');
-      }
+      await login(email, password);
+      router.push('/hub');
     } catch (err: any) {
       setError(err.message || 'Erreur de connexion');
     } finally {

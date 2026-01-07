@@ -16,6 +16,18 @@ export class CreateUniverseDto {
   @Min(1)
   speedResearch!: number;
 
+  @IsInt()
+  @Min(1)
+  speedProduction!: number;
+
+  @IsInt()
+  @Min(1)
+  maxSystems!: number;
+
+  @IsInt()
+  @Min(1)
+  maxPositions!: number;
+
   @IsBoolean()
   isPeacefulDefault!: boolean;
 }

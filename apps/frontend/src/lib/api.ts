@@ -19,6 +19,55 @@ function resolveApiBase() {
   return FALLBACK_API_BASE;
 }
 
+function normalizeApiMessage(message: unknown) {
+  if (Array.isArray(message)) {
+    return message.filter((item) => typeof item === 'string').join(', ');
+  }
+  if (typeof message === 'string') {
+    return message;
+  }
+  return null;
+}
+
+function friendlyErrorMessage(raw: string | null) {
+  if (!raw) return 'Une erreur est survenue.';
+  const map: Record<string, string> = {
+    'Not enough resources': 'Ressources insuffisantes.',
+    'Planet not owned': 'Planete introuvable.',
+    'Planet not found or not yours': 'Planete introuvable.',
+    'Invalid credentials': 'Identifiants invalides.',
+    'Email already registered': 'Cet email est deja utilise.',
+    Unauthorized: 'Acces refuse.'
+  };
+  return map[raw] ?? raw;
+}
+
+async function parseErrorMessage(res: Response) {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      const data = await res.json();
+      const message = normalizeApiMessage(data?.message) || normalizeApiMessage(data?.error);
+      return friendlyErrorMessage(message);
+    } catch {
+      return friendlyErrorMessage(null);
+    }
+  }
+  try {
+    const text = await res.text();
+    if (!text) return friendlyErrorMessage(null);
+    try {
+      const data = JSON.parse(text);
+      const message = normalizeApiMessage(data?.message) || normalizeApiMessage(data?.error);
+      return friendlyErrorMessage(message || text);
+    } catch {
+      return friendlyErrorMessage(text);
+    }
+  } catch {
+    return friendlyErrorMessage(null);
+  }
+}
+
 async function apiFetch(path: string, options: RequestInit = {}, retry = true): Promise<any> {
   const session = loadSession();
   const headers: Record<string, string> = {
@@ -43,8 +92,8 @@ async function apiFetch(path: string, options: RequestInit = {}, retry = true): 
     clearSession();
   }
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || 'Request failed');
+    const message = await parseErrorMessage(res);
+    throw new Error(message || 'Request failed');
   }
   return res.json();
 }
@@ -125,6 +174,9 @@ export async function createUniverse(payload: {
   speedFleet: number;
   speedBuild: number;
   speedResearch: number;
+  speedProduction: number;
+  maxSystems: number;
+  maxPositions: number;
   isPeacefulDefault: boolean;
   adminToken: string;
 }) {
@@ -133,6 +185,39 @@ export async function createUniverse(payload: {
     method: 'POST',
     headers: { 'x-admin-token': adminToken },
     body: JSON.stringify(body)
+  });
+}
+
+export async function updateUniverse(
+  id: string,
+  payload: {
+    name?: string;
+    speedFleet?: number;
+    speedBuild?: number;
+    speedResearch?: number;
+    speedProduction?: number;
+    maxSystems?: number;
+    maxPositions?: number;
+    isPeacefulDefault?: boolean;
+    adminToken: string;
+  }
+) {
+  const { adminToken, ...body } = payload;
+  return apiFetch(`/universes/${id}`, {
+    method: 'PUT',
+    headers: { 'x-admin-token': adminToken },
+    body: JSON.stringify(body)
+  });
+}
+
+export async function fetchProfile() {
+  return apiFetch('/auth/me');
+}
+
+export async function updateProfile(payload: { email?: string; password?: string }) {
+  return apiFetch('/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
   });
 }
 export async function fetchOverview(universeId: string, planetId: string) {

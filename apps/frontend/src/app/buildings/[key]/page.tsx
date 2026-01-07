@@ -19,6 +19,7 @@ type QueueItem = {
   type: string;
   key: string;
   levelOrQty: number;
+  startAt: string;
   endAt: string;
 };
 
@@ -112,6 +113,7 @@ export default function BuildingDetailPage() {
     return <div className="danger">Impossible de charger la planete.</div>;
   }
 
+  const resources = overview?.resources ?? { metal: 0, crystal: 0, deuterium: 0 };
   const planet = overview?.planet;
   const universe = planet?.universe;
   const position = planet?.position ?? 1;
@@ -175,12 +177,38 @@ export default function BuildingDetailPage() {
     <div className="grid">
       <div className="title-bar">
         <h2>{meta?.label ?? buildingKey}</h2>
-        <Link className="btn" href={`/overview?planet=${planetId}&universe=${universeId}`}>
-          Retour
-        </Link>
+        <div className="row gap">
+          <Link className="btn" href="/hub">
+            Hub
+          </Link>
+          <Link className="btn" href={`/overview?planet=${planetId}&universe=${universeId}`}>
+            Retour
+          </Link>
+        </div>
       </div>
 
       {error && <div className="danger">{error}</div>}
+
+      <div className="panel">
+        <div className="title-bar">
+          <h2>Ressources</h2>
+          {universe && <div className="pill">{universe.name}</div>}
+        </div>
+        <div className="grid two" style={{ marginTop: 10 }}>
+          <div className="card resource-card resource-metal">
+            <div className="resource-label">Metal</div>
+            <div className="resource-value">{formatNumber(resources.metal)}</div>
+          </div>
+          <div className="card resource-card resource-crystal">
+            <div className="resource-label">Cristal</div>
+            <div className="resource-value">{formatNumber(resources.crystal)}</div>
+          </div>
+          <div className="card resource-card resource-deut">
+            <div className="resource-label">Deuterium</div>
+            <div className="resource-value">{formatNumber(resources.deuterium)}</div>
+          </div>
+        </div>
+      </div>
 
       <div className="panel">
         <div className="muted">Niveau actuel: {level}</div>
@@ -270,8 +298,11 @@ export default function BuildingDetailPage() {
         <div className="list" style={{ marginTop: 10 }}>
           {buildingQueue.length === 0 && <div className="muted">Aucun batiment en cours.</div>}
           {buildingQueue.map((item) => {
+            const start = new Date(item.startAt).getTime();
             const end = new Date(item.endAt).getTime();
             const remaining = Math.max(0, Math.floor((end - now) / 1000));
+            const untilStart = Math.max(0, Math.floor((start - now) / 1000));
+            const buildDuration = Math.max(0, Math.floor((end - start) / 1000));
             return (
               <div key={item.id} className="card row between">
                 <div>
@@ -279,8 +310,16 @@ export default function BuildingDetailPage() {
                   <div className="muted">
                     Niveau: {item.levelOrQty} - Fin {new Date(end).toLocaleTimeString()}
                   </div>
+                  {untilStart > 0 && (
+                    <div className="muted">
+                      Demarre dans {formatDuration(untilStart)} - Temps{' '}
+                      {formatDuration(buildDuration)}
+                    </div>
+                  )}
                 </div>
-                <div className="pill">{formatDuration(remaining)}</div>
+                <div className="pill">
+                  {untilStart > 0 ? formatDuration(buildDuration) : formatDuration(remaining)}
+                </div>
               </div>
             );
           })}

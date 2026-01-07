@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import io from 'socket.io-client';
 import {
@@ -39,6 +40,7 @@ type QueueItem = {
   type: string;
   key: string;
   levelOrQty: number;
+  startAt: string;
   endAt: string;
 };
 
@@ -69,7 +71,7 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('constructions');
-  const [selectedResearch, setSelectedResearch] = useState<ResearchKey>(ResearchKey.Energy);
+  const [selectedResearch, setSelectedResearch] = useState<ResearchKey | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingKey | null>(null);
   const [selectedShip, setSelectedShip] = useState<ShipKey>(ShipKey.SmallCargo);
   const [shipQty, setShipQty] = useState(1);
@@ -109,6 +111,17 @@ export default function OverviewPage() {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [selectedBuilding]);
+
+  useEffect(() => {
+    if (!selectedResearch) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedResearch(null);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedResearch]);
 
   const reload = useCallback(async () => {
     const session = loadSession();
@@ -178,6 +191,7 @@ export default function OverviewPage() {
     try {
       await startResearch(key, planetId);
       await reload();
+      setSelectedResearch(null);
     } catch (err: any) {
       setError(err.message || 'Impossible de lancer la recherche');
     }
@@ -332,8 +346,8 @@ export default function OverviewPage() {
     });
   }
 
-  function renderResearchDetails() {
-    if (!planet || !universe) return null;
+  function renderResearchModal() {
+    if (!selectedResearch || !planet || !universe) return null;
     const level = researchMap[selectedResearch] ?? 0;
     const nextLevel = level + 1;
     const cost = calculateResearchCost(selectedResearch, nextLevel);
@@ -347,41 +361,65 @@ export default function OverviewPage() {
     const meta = RESEARCH_META[selectedResearch];
     const futureLevels = Array.from({ length: FUTURE_LEVELS }, (_, idx) => level + idx + 1);
     return (
-      <div className="panel">
-        <div className="title-bar">
-          <h2>{meta.label}</h2>
-        </div>
-        <div className="muted">Apporte: {meta.description}</div>
-        <div className="detail-grid" style={{ marginTop: 12 }}>
-          <div className="card highlight">
-            <div className="muted">Cout niveau {nextLevel}</div>
-            {renderResourceCost(cost)}
-          </div>
-          <div className="card highlight">
-            <div className="muted">Temps estime</div>
-            <div className="stat">{formatDuration(duration)}</div>
-            <div className="muted small">Labo niv {labLevel}</div>
-          </div>
-        </div>
-        <div className="section-title">Prochains niveaux</div>
-        <div className="future-grid">
-          {futureLevels.map((targetLevel) => {
-            const futureCost = calculateResearchCost(selectedResearch, targetLevel);
-            const futureDuration = calculateResearchTimeSeconds(
-              selectedResearch,
-              targetLevel,
-              universe.speedResearch,
-              labLevel
-            );
-            return (
-              <div key={targetLevel} className="card future-card">
-                <div className="future-title">Niveau {targetLevel}</div>
-                <div className="muted small">Apporte: {meta.description}</div>
-                {renderResourceCost(futureCost)}
-                <div className="muted small">Temps: {formatDuration(futureDuration)}</div>
+      <div className="modal-backdrop" onClick={() => setSelectedResearch(null)}>
+        <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-header">
+            <div className="row gap">
+              {meta.imageUrl ? (
+                <img src={meta.imageUrl} alt={meta.label} className="icon" />
+              ) : (
+                <div className="icon placeholder" />
+              )}
+              <div>
+                <div className="modal-title">{meta.label}</div>
+                <div className="muted small">
+                  Niveau {level} -&gt; {nextLevel}
+                </div>
               </div>
-            );
-          })}
+            </div>
+            <button className="btn" onClick={() => setSelectedResearch(null)}>
+              Fermer
+            </button>
+          </div>
+          <div className="modal-body">
+            <div className="muted">Apporte: {meta.description}</div>
+            <div className="detail-grid" style={{ marginTop: 12 }}>
+              <div className="card highlight">
+                <div className="muted">Cout niveau {nextLevel}</div>
+                {renderResourceCost(cost)}
+              </div>
+              <div className="card highlight">
+                <div className="muted">Temps estime</div>
+                <div className="stat">{formatDuration(duration)}</div>
+                <div className="muted small">Labo niv {labLevel}</div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn primary" onClick={() => handleResearch(selectedResearch)}>
+                Lancer la recherche
+              </button>
+            </div>
+            <div className="section-title">Prochains niveaux</div>
+            <div className="future-grid">
+              {futureLevels.map((targetLevel) => {
+                const futureCost = calculateResearchCost(selectedResearch, targetLevel);
+                const futureDuration = calculateResearchTimeSeconds(
+                  selectedResearch,
+                  targetLevel,
+                  universe.speedResearch,
+                  labLevel
+                );
+                return (
+                  <div key={targetLevel} className="card future-card">
+                    <div className="future-title">Niveau {targetLevel}</div>
+                    <div className="muted small">Apporte: {meta.description}</div>
+                    {renderResourceCost(futureCost)}
+                    <div className="muted small">Temps: {formatDuration(futureDuration)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -678,6 +716,9 @@ export default function OverviewPage() {
         <h2>Vue d ensemble</h2>
         <div className="row gap">
           {universe && <div className="pill">{universe.name}</div>}
+          <Link className="btn" href="/hub">
+            Hub
+          </Link>
           <button className="btn" onClick={logout}>
             Deconnexion
           </button>
@@ -764,7 +805,6 @@ export default function OverviewPage() {
             <h2>Recherches</h2>
             <div className="list">{renderResearchList()}</div>
           </div>
-          {renderResearchDetails()}
         </>
       )}
 
@@ -806,8 +846,12 @@ export default function OverviewPage() {
         <div className="list" style={{ marginTop: 10 }}>
           {queue.length === 0 && <div className="muted">Aucun element en cours.</div>}
           {queue.map((item) => {
+            const start = new Date(item.startAt).getTime();
             const end = new Date(item.endAt).getTime();
             const remaining = Math.max(0, Math.floor((end - now) / 1000));
+            const untilStart = Math.max(0, Math.floor((start - now) / 1000));
+            const buildDuration = Math.max(0, Math.floor((end - start) / 1000));
+            const isBuilding = item.type === 'BUILDING';
             return (
               <div key={item.id} className="card row between">
                 <div>
@@ -817,8 +861,17 @@ export default function OverviewPage() {
                   <div className="muted">
                     Niveau/Qte: {item.levelOrQty} - Fin {new Date(end).toLocaleTimeString()}
                   </div>
+                  {isBuilding && untilStart > 0 && (
+                    <div className="muted">
+                      Demarre dans {formatDuration(untilStart)} - Temps {formatDuration(buildDuration)}
+                    </div>
+                  )}
                 </div>
-                <div className="pill">{formatDuration(remaining)}</div>
+                <div className="pill">
+                  {isBuilding && untilStart > 0
+                    ? formatDuration(buildDuration)
+                    : formatDuration(remaining)}
+                </div>
               </div>
             );
           })}
@@ -826,6 +879,7 @@ export default function OverviewPage() {
       </div>
 
       {renderBuildingModal()}
+      {renderResearchModal()}
     </div>
   );
 }
